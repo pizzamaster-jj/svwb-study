@@ -266,6 +266,14 @@
       <label class="muted" style="font-size:12px">ターン/PP</label>
       <input type="number" id="adTurn" min="1" max="10" value="4" style="width:64px">
     </div>
+    <div class="filters" style="margin-top:-6px">
+      <span class="muted" style="font-size:12px">盤面状況(任意):</span>
+      <label class="muted" style="font-size:12px">自分の体力</label>
+      <input type="number" id="adMyHP" min="1" max="40" value="20" style="width:60px">
+      <label class="muted" style="font-size:12px">相手盤面の攻撃力合計</label>
+      <input type="number" id="adOppAtk" min="0" max="60" value="0" style="width:60px">
+      <label class="row" style="gap:4px;font-size:12px;color:var(--muted)"><input type="checkbox" id="adMustRemove" style="width:auto"> 相手に除去必須のフォロワーがいる</label>
+    </div>
     <div id="adBody"></div>
   </section>
 
@@ -1015,7 +1023,7 @@ function importRecipe(metaId){
   $('#adDeck').value=deck.id; renderAdvisor();
   flashOK('取り込みました：'+deck.name);
 }
-let adPD='play', adTurn=4;
+let adPD='play', adTurn=4, adMyHP=20, adOppAtk=0, adMustRemove=false;
 function initAdvisor(){
   const sel=$('#adDeck'), cur=sel.value;
   sel.innerHTML='<option value="">自分のデッキを選択</option>'+state.decks.map(d=>{
@@ -1026,6 +1034,9 @@ function initAdvisor(){
   if(oc) opp.value=oc;
   sel.onchange=renderAdvisor; opp.onchange=renderAdvisor;
   $('#adTurn').oninput=()=>{ adTurn=Math.max(1,Math.min(10,+$('#adTurn').value||1)); renderAdvisor(); };
+  $('#adMyHP').oninput=()=>{ adMyHP=Math.max(1,+$('#adMyHP').value||20); renderAdvisor(); };
+  $('#adOppAtk').oninput=()=>{ adOppAtk=Math.max(0,+$('#adOppAtk').value||0); renderAdvisor(); };
+  $('#adMustRemove').onchange=()=>{ adMustRemove=$('#adMustRemove').checked; renderAdvisor(); };
   $('#adPlay').onclick=()=>{adPD='play';$('#adPlay').classList.add('active');$('#adDraw').classList.remove('active');renderAdvisor();};
   $('#adDraw').onclick=()=>{adPD='draw';$('#adDraw').classList.add('active');$('#adPlay').classList.remove('active');renderAdvisor();};
   renderAdvisor();
@@ -1033,8 +1044,8 @@ function initAdvisor(){
 // ===== phase2: 確率計算＆アクション最適化 =====
 function comb(n,k){ if(k<0||k>n)return 0; k=Math.min(k,n-k); let r=1; for(let i=0;i<k;i++) r=r*(n-i)/(i+1); return r; }
 function pAtLeastOne(copies,seen,N=40){ if(seen<=0||copies<=0)return 0; const p=1-comb(N-copies,seen)/comb(N,seen); return Math.max(0,Math.min(1,p)); }
-function playValue(c,opp,PP){
-  const cost=+c.cost, R=cardRoles(c), M=cardMechanics(c), th=(opp&&opp.threat)||[]; let v=cost; // PPを使う＝テンポ価値
+function playValue(c,opp,PP,board){
+  const cost=+c.cost, R=cardRoles(c), M=cardMechanics(c), th=(opp&&opp.threat)||[], isClear=/場のフォロワーすべて/.test(plainText(c)); let v=cost; // PPを使う＝テンポ価値
   if(R.includes('develop')) v+=1.5;
   if(R.includes('removal')) v+= (th.includes('board')||th.includes('tempo')||th.includes('evolve'))?3:1.5;
   if(R.includes('guard'))  v+= (th.includes('board')||th.includes('tempo')||th.includes('burst'))?2:1;
@@ -1048,6 +1059,11 @@ function playValue(c,opp,PP){
   if((M.evoWant||M.superEvoWant) && PP>=4) v+=1.5;
   // ②対面で必要な回答なら加点
   if(opp&&META_NEEDS[opp.id] && META_NEEDS[opp.id].needs.some(n=>cardMeetsNeed(c,n))) v+=1.5;
+  // ③相手の実盤面: 除去必須なら除去/全体を優先、リーサル圏なら守護/回復/除去を優先
+  if(board){
+    if(board.mustRemove && (R.includes('removal')||isClear)) v+=3;
+    if(board.lethal){ if(R.includes('guard')) v+=3.5; if(R.includes('heal')) v+=3; if(R.includes('removal')||isClear) v+=2; }
+  }
   return v;
 }
 // このプレイ順に条件未達など注意があれば返す
@@ -1061,11 +1077,11 @@ function lineNotes(cards,PP){
   });
   return n;
 }
-function bestLines(hand,PP,opp){
+function bestLines(hand,PP,opp,board){
   const items=hand.slice(0,12), n=items.length, lines=[];
   for(let mask=0;mask<(1<<n);mask++){
     let cost=0,val=0,cards=[];
-    for(let i=0;i<n;i++) if(mask&(1<<i)){ cost+=+items[i].cost; val+=playValue(items[i],opp,PP); cards.push(items[i]); }
+    for(let i=0;i<n;i++) if(mask&(1<<i)){ cost+=+items[i].cost; val+=playValue(items[i],opp,PP,board); cards.push(items[i]); }
     if(cost<=PP && cards.length) lines.push({cards,cost,val});
   }
   lines.sort((a,b)=> b.val-a.val || b.cost-a.cost || a.cards.length-b.cards.length);
@@ -1204,10 +1220,11 @@ function renderAdvisor(){
   }
   // ② 相手の警戒カード（確率）
   if(opp) html+=threatPanelHTML(opp);
-  // hand mode
-  html+=`<div class="panel"><h3 style="margin-top:0">手札を入れて診断（引いた札を選択・最大9枚）</h3>
-    <div class="handpick" id="adHandPick">${uniq.sort((a,b)=>+a.cost-+b.cost).map(c=>`<span class="hp ${adHand.includes(c.id)?'sel':''}" data-id="${c.id}">
-      <img src="${c.image||''}" onerror="this.style.visibility='hidden'">${esc(c.name)}<span class="muted">(${c.cost})</span></span>`).join('')}</div>
+  // hand mode（同名複数引き対応: クリックで枚数サイクル 0→…→デッキ採用数→0）
+  const cnt=id=>adHand.filter(x=>x===id).length;
+  html+=`<div class="panel"><h3 style="margin-top:0">手札を入れて診断（クリックで枚数増減・合計最大10枚）</h3>
+    <div class="handpick" id="adHandPick">${uniq.sort((a,b)=>+a.cost-+b.cost).map(c=>{const n=cnt(c.id);return `<span class="hp ${n?'sel':''}" data-id="${c.id}">
+      <img src="${c.image||''}" onerror="this.style.visibility='hidden'">${esc(c.name)}<span class="muted">(${c.cost})</span>${n?`<b style="color:var(--ok)"> ×${n}</b>`:''}</span>`;}).join('')}</div>
     <div id="adHandResult"></div></div>`;
   // ① 今ターンの推奨アクション
   html+=actionPanelHTML(opp);
@@ -1216,10 +1233,13 @@ function renderAdvisor(){
   html+=scored.slice(0,14).map(x=>keepRowHTML(x)).join('');
   html+=`<div class="muted" style="font-size:11px;margin-top:6px">※推奨度＝ヒューリスティックスコア（勝率ではありません）</div></div>`;
   el.innerHTML=html;
-  // bind hand pick
+  // bind hand pick（枚数サイクル）
   el.querySelectorAll('#adHandPick .hp').forEach(h=>h.onclick=()=>{
-    const id=h.dataset.id; if(adHand.includes(id)) adHand=adHand.filter(x=>x!==id);
-    else { if(adHand.length>=9){ flash('手札は9枚まで'); return;} adHand.push(id); }
+    const id=h.dataset.id, max=Math.min(deck.cards[id]||1,3), cur=adHand.filter(x=>x===id).length;
+    let next=cur+1>max?0:cur+1;
+    adHand=adHand.filter(x=>x!==id);
+    if(adHand.length+next>10){ flash('手札は合計10枚まで'); next=cur; }
+    for(let k=0;k<next;k++) adHand.push(id);
     renderAdvisor();
   });
   el.querySelectorAll('.keeprow img,[data-open]').forEach(im=>im.onclick=()=>openCard(im.dataset.id));
@@ -1243,27 +1263,42 @@ function renderHandResult(opp){
     `<div class="anz" style="margin-top:8px"><div class="txt">この手札の評価：<b>${keeps}枚キープ推奨</b>。`+
     (keeps===0?'全返しでも可。低コストの引き直しを狙う。':keeps>=3?'good。初動が揃っている。':'低コストが薄いので、キープ以外は返して初動を厚くする。')+'</div></div>';
 }
-// ① 今ターンの推奨アクション（手札＋PP → 最適プレイ順を推奨度%）
+// 進化/超進化の推奨（EP解禁: 進化=T4以降, 超進化=T6以降・推定）
+function evoSuggestion(cards,turn){
+  if(turn<4) return null;
+  const evos=cards.filter(c=>c.type==='Follower' && (cardMechanics(c).evoWant || c.evo_skill_text));
+  if(!evos.length) return null;
+  evos.sort((a,b)=> (+b.cost)-(+a.cost));
+  const pick=evos[0], M=cardMechanics(pick);
+  const superOK = turn>=6 && M.superEvoWant;
+  return (superOK?'超進化':'進化')+'推奨: '+pick.name+(M.evoWant?'（進化時効果が強い）':'（有利トレード/打点）');
+}
+// ① 今ターンの推奨アクション（手札＋PP＋盤面 → 最適プレイ順を推奨度%）
 function actionPanelHTML(opp){
   const PP=adTurn;
+  const board={ mustRemove:adMustRemove, lethal:(adOppAtk>0 && adOppAtk>=adMyHP) };
   let h=`<div class="panel"><h3 style="margin-top:0">今ターンの推奨アクション（PP=${PP}）</h3>`;
-  if(adHand.length<1){ return h+`<div class="muted" style="font-size:12px">上の「手札を入れて診断」で今の手札を選ぶと、PP=${PP}で切るべきプレイを推奨度%で提案します。</div></div>`; }
+  if(board.lethal) h+=`<div class="anz" style="border:1px solid var(--danger)"><div class="txt" style="color:var(--danger)">⚠ 相手盤面 ${adOppAtk}点 ≥ 自分の体力 ${adMyHP}。次のターン<b>リーサル圏</b>。守護/回復/全体除去を最優先（盤面を残さない）。</div></div>`;
+  else if(adMustRemove) h+=`<div class="anz"><div class="txt" style="color:var(--accent2)">相手に除去必須のフォロワーあり → 除去/全体除去を優先評価中。</div></div>`;
+  if(adHand.length<1){ return h+`<div class="muted" style="font-size:12px">上の「手札を入れて診断」で今の手札を選ぶと、PP=${PP}・盤面状況を踏まえて切るべきプレイを推奨度%で提案します。</div></div>`; }
   const hand=adHand.map(id=>byId[id]).filter(Boolean);
-  const lines=bestLines(hand,PP,opp);
+  const lines=bestLines(hand,PP,opp,board);
   if(!lines.length){ return h+`<div class="muted" style="font-size:12px">PP${PP}で出せる札がありません（手札のコストが高い）。ドロー/PP加速を待つか、より軽い札を選択してください。</div></div>`; }
   const sum=lines.reduce((a,l)=>a+l.val,0)||1;
   h+=lines.map((l,i)=>{
     const pct=Math.round(l.val/sum*100);
     const seq=l.cards.slice().sort((a,b)=>+a.cost-+b.cost);
     const col=i===0?'var(--ok)':'var(--muted)';
+    const evo=i===0?evoSuggestion(seq,PP):null;
     return `<div class="keeprow"><div class="pct" style="width:70px;text-align:center"><b style="color:${col};font-size:16px">${pct}%</b>
         ${i===0?'<div class="verdict v-keep" style="margin-top:2px">推奨</div>':''}</div>
       <div class="kinfo"><div class="kn" style="flex-wrap:wrap">${seq.map(c=>`<span class="cardmini" onclick="openCard('${c.id}')"><img src="${c.image||''}" onerror="this.style.visibility='hidden'">${esc(c.name)}<span class="muted">(${c.cost})</span></span>`).join('')}</div>
         <div class="kr">PP ${l.cost}/${PP} 使用${l.cost<PP?`（${PP-l.cost}余り）`:'（使い切り）'}・盤面/テンポ評価 ${l.val.toFixed(1)}</div>
+        ${evo?`<div class="kr" style="color:var(--ok)">◆ ${esc(evo)}</div>`:''}
         ${lineNotes(seq,PP).map(n=>`<div class="kr" style="color:var(--accent2)">⚠ ${esc(n)}</div>`).join('')}</div></div>`;
   }).join('');
   if(opp&&META_NEEDS[opp.id]) h+=`<div class="anz" style="margin-top:8px"><div class="txt">vs ${opp.name} の要点：${esc(META_NEEDS[opp.id].note)}</div></div>`;
-  h+=`<div class="muted" style="font-size:11px;margin-top:6px">※効果解析込み（エンハンス/進化/PP加速/対面の必要札を加味）。ただし相手盤面・同名複数引き・厳密な進化順は未考慮の簡易最適化。%は候補間の相対推奨度（勝率ではない）。</div></div>`;
+  h+=`<div class="muted" style="font-size:11px;margin-top:6px">※効果解析＋盤面状況＋同名複数引き＋進化(EP)を加味。厳密な進化順・打点計算・相手の手札は簡略。%は候補間の相対推奨度（勝率ではない）。</div></div>`;
   return h;
 }
 // ② 相手の警戒カード（残り山からの確率）
