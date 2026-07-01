@@ -140,6 +140,28 @@
   .anz h4{margin:0 0 4px;font-size:12px;color:var(--accent2)}
   .anz .txt{font-size:12.5px}
   .draftbtn{font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+  /* advisor */
+  .segbtn{background:var(--panel);color:var(--muted);border:none;padding:8px 16px;cursor:pointer;font-size:13px}
+  .segbtn.active{background:var(--accent);color:#0b1020;font-weight:700}
+  .keeprow{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;margin-bottom:4px;background:var(--panel2)}
+  .keeprow img{width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:pointer}
+  .keeprow .kinfo{flex:1;min-width:0}
+  .keeprow .kn{font-size:12.5px;font-weight:600;display:flex;gap:6px;align-items:center}
+  .keeprow .kn .cst{width:18px;height:18px;border-radius:50%;background:var(--accent);color:#0b1020;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .keeprow .kr{font-size:11px;color:var(--muted);margin-top:2px}
+  .keeprow .pct{text-align:right;flex-shrink:0;width:96px}
+  .keeprow .pct b{font-size:15px}
+  .kbar{height:6px;border-radius:3px;background:var(--line);margin-top:3px;overflow:hidden}
+  .kbar>span{display:block;height:100%;border-radius:3px}
+  .verdict{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
+  .v-keep{background:var(--ok);color:#062}.v-ret{background:var(--danger);color:#fff}
+  .handpick{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .hp{display:inline-flex;align-items:center;gap:5px;padding:3px 8px 3px 3px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:12px;background:var(--panel2)}
+  .hp.sel{border-color:var(--accent);background:rgba(109,139,255,.15)}
+  .hp img{width:24px;height:24px;border-radius:4px;object-fit:cover}
+  .openrow{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .openrow .ot{width:52px;flex-shrink:0;color:var(--accent2);font-weight:700;font-size:12px}
+  .openrow .od{font-size:12.5px}
   @media(max-width:520px){.modal .head{flex-direction:column}.modal .head img{width:100px}}
 </style>
 </head>
@@ -150,6 +172,7 @@
     <button data-tab="cards" class="active">カード</button>
     <button data-tab="deck">デッキ作成</button>
     <button data-tab="playing">プレイング</button>
+    <button data-tab="advisor">アドバイザー</button>
     <button data-tab="combos">コンボ・シナジー</button>
     <button data-tab="matchup">マッチアップ</button>
     <button data-tab="turns">ターン別</button>
@@ -227,6 +250,21 @@
       <select id="plDeck" style="min-width:220px"></select>
     </div>
     <div id="plBody"></div>
+  </section>
+
+  <!-- ADVISOR -->
+  <section id="tab-advisor" class="tab">
+    <h2>プレイアドバイザー</h2>
+    <div class="note"><b>自分のデッキ・手番・相手デッキ</b>を選ぶと、マリガンの<b>キープ推奨度（％）</b>と理由、相手の想定初動、対面方針を出します。手札を入れると1枚ずつキープ/返すを判定します。<br><span class="muted" style="font-size:11px">※％は勝率ではなく<b>ヒューリスティック推奨度</b>（手番・対面の脅威・カードの役割・コストを重み付けして正規化したもの）。叩き台として使い、実戦で上書きしてください。相性データは新環境で未整備のため「推定」です。</span></div>
+    <div class="filters">
+      <select id="adDeck" style="min-width:200px"></select>
+      <div class="row" style="gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+        <button class="segbtn active" id="adPlay" data-pd="play">先攻</button>
+        <button class="segbtn" id="adDraw" data-pd="draw">後攻</button>
+      </div>
+      <select id="adOpp" style="min-width:180px"></select>
+    </div>
+    <div id="adBody"></div>
   </section>
 
   <!-- COMBOS -->
@@ -604,10 +642,10 @@ function initData(){
   $('#impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
     r.onload=()=>{try{const d=JSON.parse(r.result);
       state=Object.assign({combos:[],matchups:{},turns:[],decks:[],playing:{}},d);persist();
-      renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();alert('読み込みました');
+      renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();alert('読み込みました');
     }catch(err){alert('読み込み失敗: '+err.message);}};r.readAsText(f);};
   $('#wipeBtn').onclick=()=>{if(confirm('コンボ・マッチアップ・ターン別・デッキ・プレイングを全消去します。よろしいですか？')){
-    state={combos:[],matchups:{},turns:[],decks:[],playing:{}};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();}};
+    state={combos:[],matchups:{},turns:[],decks:[],playing:{}};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();}};
   $('#refreshBtn').onclick=async()=>{
     try{const res=await fetch('https://shadowverse-wb.com/web/CardList/cardList?lang=ja');
       const j=await res.json();const total=j.data&&j.data.count;
@@ -732,7 +770,7 @@ function saveDeck(){
   if(curDeck.id){ const i=state.decks.findIndex(d=>d.id===curDeck.id);
     if(i>=0) state.decks[i]={...curDeck,cards:{...curDeck.cards}};
   } else { curDeck.id=Date.now(); state.decks.push({...curDeck,cards:{...curDeck.cards}}); }
-  persist(); renderSavedDecks(); initPlaying();
+  persist(); renderSavedDecks(); initPlaying(); initAdvisor();
   flashOK(deckTotal()===DECKSIZE?'保存しました（40枚）':`保存しました（${deckTotal()}枚）`);
 }
 function flashOK(msg){ let el=$('#deckFlash'); if(!el){el=document.createElement('div');el.id='deckFlash';
@@ -750,7 +788,7 @@ function renderSavedDecks(){
   }).join('');
   el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>loadDeck(+b.dataset.load));
   el.querySelectorAll('[data-deldeck]').forEach(b=>b.onclick=()=>{
-    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); initPlaying(); } });
+    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); initPlaying(); initAdvisor(); } });
 }
 function loadDeck(id){
   const d=state.decks.find(x=>x.id===id); if(!d) return;
@@ -872,7 +910,8 @@ function renderPlaying(){
       <span class="adv" style="color:${advColor};border-color:${advColor}">${adv||'相性未定'}</span>
     </summary><div class="inner" data-meta="${m.id}">
       <div class="anz"><h4>相手の狙い</h4><div class="txt">${esc(m.plan)}</div></div>
-      <div class="anz"><h4>キーカード</h4><div>${m.key.map(id=>miniCard(id,true)).join('')}</div></div>
+      <div class="anz"><h4>キーカード</h4><div>${m.key.map(id=>miniCard(id,true)).join('')}</div>
+        ${META_RECIPE[m.id]?`<button class="draftbtn" style="margin-top:8px" onclick="importRecipe('${m.id}')">この参考構築を自分のデッキに取り込む</button>`:''}</div>
       <div class="anz"><h4>警戒点</h4><div class="txt">${esc(m.watch)}</div></div>
       ${m.pilot?`<details class="anz" style="padding:8px 12px"><summary style="cursor:pointer;color:var(--accent2);font-size:12px;font-weight:600">使うときの回し方（参考）</summary><div class="txt" style="margin-top:6px;white-space:pre-wrap">${esc(m.pilot)}</div></details>`:''}
       <div class="row" style="justify-content:space-between;align-items:center;margin:10px 0 2px">
@@ -944,9 +983,158 @@ function draftMatchup(deck,pl,m){
   if(!mm.mull||confirm('「この対面のマリガン」を上書きしますか？')) mm.mull=mull;
 }
 
+/* ============ ADVISOR ============ */
+// 相手デッキの想定初動（メタ知識ベース・出典 RESEARCH.md）
+const META_OPENING={
+  ramp_dragon:[['1-2T','竜の啓示/退屈な睥睨等でPP最大値を加速。盤面は薄い'],['3-5T','さらに加速しつつ小型で受け'],['6-7T','大型フォロワー・全体除去(ナイトフォール等)が着地し始める'],['8T-','全体除去＋大型/疾走でワンパン圏']],
+  spell_witch:[['1-4T','スペルを撃ってスペブを稼ぐ。盤面・顔は軽視されがち'],['5-6T','テトラ＆ラティカ着地でリーサル準備'],['7T-','ソニック・フォー等で16点級の疾走リーサル']],
+  evo_bishop:[['1-3T','小型＋進化権で盤面を作る'],['4-6T','進化・超進化を連打、進化6回でサンダルフォン圏'],['7-8T','ベルディリア＆カステルで超進化展開、ヴィーラで消滅＋守護']],
+  midrange_nightmare:[['2-4T','盤面フォロワーで取り合い'],['5-6T','徒姫で2コス以下を展開＋突進付与'],['9T-','マクミランでゾンビ大量展開']],
+  combo_royal:[['1-3T','低コストを展開して連携を稼ぐ'],['4-6T','シエテで一斉進化、分班長/衛生兵で横展開'],['7T-','セザール/マーズ＋連携20でギルダリア・バニー&バロン連打']],
+  tempo_elf:[['1-3T','複数プレイ条件を満たして展開・顔詰め'],['4-6T','盤面と打点を伸ばして押し込み'],['7T-','セタス＆メイシア等で詰め']],
+  temanote_witch:[['1-4T','天晶を並べて条件を整える'],['5-7T','盤面を維持しつつリソース確保'],['8T-','カルギデンスラ等の大型でフィニッシュ']],
+  discard_dragon:[['1-3T','赤色流し等で捨てつつ除去'],['4-6T','捨てた枚数を活かして展開'],['7T-','大型で押し込み']],
+  mode_nightmare:[['2-4T','モードを切り替えて除去/展開を選択'],['5-7T','盤面とリソースを両立'],['8T-','状況に応じたフィニッシュ']],
+};
+// 参考構築（進化連携ロイヤル・型A / RESEARCH.md 出典 GameWith）※抽出ベースのため参考
+const META_RECIPE={
+  combo_royal:[['10722310',3],['10403120',3],['10722110',3],['10522310',3],['10823110',2],['10702110',2],
+    ['10403110',1],['10424120',3],['10724110',3],['10722120',3],['10723110',3],['10824110',3],
+    ['10423310',1],['10724120',3],['10824120',3],['10404110',1]],
+};
+function importRecipe(metaId){
+  const r=META_RECIPE[metaId]; const m=META_DECKS.find(x=>x.id===metaId);
+  if(!r||!m){ alert('この構築の取り込みデータがありません'); return; }
+  const cards={}; r.forEach(([id,n])=>{ if(byId[id]) cards[id]=n; });
+  const total=Object.values(cards).reduce((a,b)=>a+b,0);
+  if(!confirm(m.name+'の参考構築（'+total+'枚）を自分のデッキとして保存しますか？')) return;
+  const deck={id:Date.now(),name:m.name+'(参考構築)',cls:m.cls,cards};
+  state.decks.push(deck); persist(); renderSavedDecks(); initPlaying(); initAdvisor();
+  $('#adDeck').value=deck.id; renderAdvisor();
+  flashOK('取り込みました：'+deck.name);
+}
+let adPD='play';
+function initAdvisor(){
+  const sel=$('#adDeck'), cur=sel.value;
+  sel.innerHTML='<option value="">自分のデッキを選択</option>'+state.decks.map(d=>{
+    const cl=CLASSES[d.cls]; return `<option value="${d.id}">${cl?cl.jp:''}｜${esc(d.name)}</option>`; }).join('');
+  if(cur&&state.decks.some(d=>d.id==cur)) sel.value=cur;
+  const opp=$('#adOpp'), oc=opp.value;
+  opp.innerHTML='<option value="">相手デッキを選択</option>'+META_DECKS.map(m=>`<option value="${m.id}">Tier${m.tier} ${m.name}</option>`).join('');
+  if(oc) opp.value=oc;
+  sel.onchange=renderAdvisor; opp.onchange=renderAdvisor;
+  $('#adPlay').onclick=()=>{adPD='play';$('#adPlay').classList.add('active');$('#adDraw').classList.remove('active');renderAdvisor();};
+  $('#adDraw').onclick=()=>{adPD='draw';$('#adDraw').classList.add('active');$('#adPlay').classList.remove('active');renderAdvisor();};
+  renderAdvisor();
+}
+// カードの役割判定
+function cardRoles(c){
+  const t=(c.skill_text||'')+' '+(c.evo_skill_text||''); const cost=+c.cost; const R=[];
+  if(/場に出す/.test(t)||(c.type==='Follower'&&cost<=3)) R.push('develop');
+  if(/引く|手札に加える|ドロー/.test(t)) R.push('draw');
+  if(/守護/.test(t)) R.push('guard');
+  if(/回復|ドレイン/.test(t)) R.push('heal');
+  if(/破壊|消滅|それに\d/.test(t)) R.push('removal');
+  if(/疾走/.test(t)||cost>=7) R.push('finisher');
+  return R;
+}
+// キープ推奨度(%)ヒューリスティック
+function keepScore(c,opp){
+  const cost=+c.cost, R=cardRoles(c), th=(opp&&opp.threat)||[]; const why=[];
+  let s;
+  if(cost<=1){s=70;} else if(cost===2){s=72;} else if(cost===3){s=60;}
+  else if(cost===4){s=46;} else if(cost===5){s=42;} else if(cost===6){s=26;} else {s=15;}
+  if(cost<=3){ why.push('低コストで初動になる'); }
+  if(R.includes('develop')){ s+=8; why.push('盤面を作れる'); }
+  if(R.includes('draw')){ s+=6; why.push('手札を回せる'); }
+  if(R.includes('guard')){ s+=5; }
+  if(R.includes('removal')){ s+=5; }
+  if(R.includes('finisher')&&cost>=6){ s-=10; why.push('重く初手向きでない'); }
+  // 対面補正
+  if(th.includes('board')||th.includes('tempo')){
+    if(cost<=3){s+=8; why.push('盤面勝負なので早い札が重要');}
+    if(R.includes('guard')){s+=8; why.push('相手の展開を受けられる');}
+    if(R.includes('removal')){s+=6;}
+    if(R.includes('finisher')){s-=8;}
+  }
+  if(th.includes('burst')){
+    if(R.includes('guard')){s+=6;} if(R.includes('heal')){s+=8; why.push('バーストを耐える');}
+    if(R.includes('finisher')){s-=5;} if(cost<=3){s+=4; why.push('先に攻めて相手より早く');}
+  }
+  if(th.includes('ramp')){
+    if(cost<=3){s+=8; why.push('相手が遅いので速度で押す');}
+    if(R.includes('finisher')&&/疾走/.test((c.skill_text||''))){s+=6;}
+    if(cost>=6&&!/疾走/.test(c.skill_text||'')){s-=8; why.push('レース負けするので重い札は返す');}
+  }
+  if(th.includes('evolve')){ if(R.includes('removal')){s+=6;} if(R.includes('guard')){s+=4;} }
+  // 手番補正
+  if(adPD==='draw'){ if(cost>=3&&cost<=4){s+=4; why.push('後攻の+1PP/EPを活かせる');} }
+  else { if(cost<=3){s+=5; why.push('先攻はテンポ重視');} }
+  s=Math.max(5,Math.min(95,Math.round(s)));
+  return {score:s, why:[...new Set(why)].slice(0,3).join('・')};
+}
+let adHand=[]; // selected hand card ids
+function renderAdvisor(){
+  const el=$('#adBody'), deckId=$('#adDeck').value, oppId=$('#adOpp').value;
+  if(!state.decks.length){ el.innerHTML='<div class="empty">先に「デッキ作成」でデッキを保存するか、<br>「プレイング」タブの連携進化ロイヤルから参考構築を取り込んでください</div>'
+    +'<div class="row" style="justify-content:center;margin-top:10px"><button class="btn" onclick="importRecipe(\'combo_royal\')">連携進化ロイヤルの参考構築を取り込む</button></div>'; return; }
+  if(!deckId){ el.innerHTML='<div class="empty">自分のデッキを選択してください</div>'; return; }
+  const deck=state.decks.find(d=>d.id==deckId); const opp=META_DECKS.find(m=>m.id===oppId);
+  // dedup deck cards by name
+  const uniq=[]; const seen=new Set();
+  Object.keys(deck.cards).forEach(id=>{ const c=byId[id]; if(!c||seen.has(c.name))return; seen.add(c.name); uniq.push(c); });
+  const scored=uniq.map(c=>({c,...keepScore(c,opp)})).sort((a,b)=>b.score-a.score||(+a.c.cost-+b.c.cost));
+  const pdLabel=adPD==='draw'?'後攻':'先攻';
+  let html='';
+  if(!opp){ html+='<div class="note" style="border-color:var(--muted)">相手デッキを選ぶと対面補正が入ります（今は'+pdLabel+'・汎用基準で表示中）</div>'; }
+  // opponent read
+  if(opp){
+    html+=`<div class="panel"><h3 style="margin-top:0">相手（${opp.name}）の想定初動</h3>`;
+    (META_OPENING[opp.id]||[]).forEach(([t,d])=>html+=`<div class="openrow"><div class="ot">${t}</div><div class="od">${esc(d)}</div></div>`);
+    html+=`<div class="anz" style="margin-top:10px"><h4>この対面の方針（${pdLabel}）</h4><div class="txt">${esc(opp.plan)}</div>
+      <div class="txt" style="margin-top:6px;color:var(--accent2)">警戒: ${esc(opp.watch)}</div></div></div>`;
+  }
+  // hand mode
+  html+=`<div class="panel"><h3 style="margin-top:0">手札を入れて診断（引いた札を選択）</h3>
+    <div class="handpick" id="adHandPick">${uniq.sort((a,b)=>+a.cost-+b.cost).map(c=>`<span class="hp ${adHand.includes(c.id)?'sel':''}" data-id="${c.id}">
+      <img src="${c.image||''}" onerror="this.style.visibility='hidden'">${esc(c.name)}<span class="muted">(${c.cost})</span></span>`).join('')}</div>
+    <div id="adHandResult"></div></div>`;
+  // mulligan ranking
+  html+=`<div class="panel"><h3 style="margin-top:0">マリガン キープ推奨度（${pdLabel}${opp?' / vs '+opp.name:''}）</h3>`;
+  html+=scored.slice(0,14).map(x=>keepRowHTML(x)).join('');
+  html+=`<div class="muted" style="font-size:11px;margin-top:6px">※推奨度＝ヒューリスティックスコア（勝率ではありません）</div></div>`;
+  el.innerHTML=html;
+  // bind hand pick
+  el.querySelectorAll('#adHandPick .hp').forEach(h=>h.onclick=()=>{
+    const id=h.dataset.id; if(adHand.includes(id)) adHand=adHand.filter(x=>x!==id);
+    else { if(adHand.length>=4){ flash('手札は4枚まで'); return;} adHand.push(id); }
+    renderAdvisor();
+  });
+  el.querySelectorAll('.keeprow img,[data-open]').forEach(im=>im.onclick=()=>openCard(im.dataset.id));
+  renderHandResult(opp);
+}
+function keepColor(s){ return s>=65?'var(--ok)':s>=45?'var(--accent2)':'var(--danger)'; }
+function keepRowHTML(x){
+  const c=x.c, col=keepColor(x.score);
+  return `<div class="keeprow"><img data-id="${c.id}" src="${c.image||''}" onerror="this.style.visibility='hidden'">
+    <div class="kinfo"><div class="kn"><span class="cst">${c.cost}</span>${esc(c.name)}</div>
+      <div class="kr">${esc(x.why||'')}</div>
+      <div class="kbar"><span style="width:${x.score}%;background:${col}"></span></div></div>
+    <div class="pct"><b style="color:${col}">${x.score}%</b> <span class="verdict ${x.score>=55?'v-keep':'v-ret'}">${x.score>=55?'キープ':'返す'}</span></div></div>`;
+}
+function renderHandResult(opp){
+  const box=$('#adHandResult'); if(!box) return;
+  if(!adHand.length){ box.innerHTML='<div class="muted" style="font-size:12px">引いた手札を上から選ぶと、1枚ずつキープ/返すを判定します</div>'; return; }
+  const rows=adHand.map(id=>({c:byId[id],...keepScore(byId[id],opp)})).sort((a,b)=>b.score-a.score);
+  const keeps=rows.filter(r=>r.score>=55).length;
+  box.innerHTML=rows.map(keepRowHTML).join('')+
+    `<div class="anz" style="margin-top:8px"><div class="txt">この手札の評価：<b>${keeps}枚キープ推奨</b>。`+
+    (keeps===0?'全返しでも可。低コストの引き直しを狙う。':keeps>=3?'good。初動が揃っている。':'低コストが薄いので、キープ以外は返して初動を厚くする。')+'</div></div>';
+}
+
 /* ============ boot ============ */
 initFilters(); renderCards();
-initDeck(); initPlaying(); initCombos(); initMatchup(); initTurns(); initData();
+initDeck(); initPlaying(); initAdvisor(); initCombos(); initMatchup(); initTurns(); initData();
 </script>
 </body>
 </html>
