@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>シャドバ ビヨンド 学習ノート</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#181c2e; --panel2:#20263f; --line:#2c3352;
+    --txt:#e6e8f0; --muted:#9aa3c0; --accent:#6d8bff; --accent2:#ffcf5c;
+    --kw:#ffcf5c; --danger:#ff6b7a; --ok:#4fd1a1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+    background:var(--bg);color:var(--txt);font-size:14px;line-height:1.6}
+  a{color:var(--accent)}
+  header{position:sticky;top:0;z-index:20;background:rgba(15,18,32,.92);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);padding:10px 16px}
+  .title{font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .title small{color:var(--muted);font-weight:400;font-size:12px}
+  nav{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}
+  nav button{background:var(--panel);color:var(--muted);border:1px solid var(--line);
+    padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px}
+  nav button.active{background:var(--accent);color:#0b1020;border-color:var(--accent);font-weight:700}
+  main{max-width:1180px;margin:0 auto;padding:16px}
+  .tab{display:none} .tab.active{display:block}
+  h2{font-size:18px;margin:4px 0 12px}
+  h3{font-size:14px;margin:16px 0 8px;color:var(--accent2)}
+  .muted{color:var(--muted)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,select,textarea{background:var(--panel);color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  textarea{width:100%;min-height:64px;resize:vertical}
+  button.btn{background:var(--accent);color:#0b1020;border:none;padding:8px 14px;border-radius:8px;
+    cursor:pointer;font-weight:600;font-size:13px}
+  button.ghost{background:var(--panel);color:var(--txt);border:1px solid var(--line)}
+  button.mini{padding:3px 8px;font-size:12px;border-radius:6px}
+  button.del{background:transparent;color:var(--danger);border:1px solid var(--line)}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--panel);
+    padding:12px;border-radius:12px;border:1px solid var(--line);margin-bottom:14px}
+  .filters input[type=text]{flex:1;min-width:180px}
+  .count{color:var(--muted);font-size:12px;margin:0 0 10px}
+  /* card grid */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    cursor:pointer;transition:.12s;position:relative}
+  .card:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .card .img{width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--panel2);display:block}
+  .card .meta{padding:8px}
+  .card .nm{font-weight:600;font-size:12.5px;line-height:1.3;height:2.6em;overflow:hidden}
+  .card .sub{display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:var(--muted)}
+  .cls-badge{position:absolute;top:6px;left:6px;font-size:10px;padding:2px 6px;border-radius:6px;
+    font-weight:700;background:rgba(0,0,0,.55)}
+  .cost-badge{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;
+    background:var(--accent);color:#0b1020;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px}
+  /* card panels (combos etc) */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+  .chip{display:inline-flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:999px;padding:3px 10px;font-size:12px;margin:2px}
+  .chip .x{cursor:pointer;color:var(--danger);font-weight:700}
+  .kw{color:var(--kw);font-weight:600}
+  .div{border-top:1px dashed var(--line);margin:6px 0}
+  .cardmini{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:3px 8px 3px 3px;font-size:12px;margin:2px;cursor:pointer}
+  .cardmini img{width:26px;height:26px;border-radius:5px;object-fit:cover}
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;display:none;
+    align-items:flex-start;justify-content:center;padding:24px;overflow:auto}
+  .overlay.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:16px;max-width:620px;width:100%;
+    padding:0;overflow:hidden}
+  .modal .head{display:flex;gap:14px;padding:16px;border-bottom:1px solid var(--line)}
+  .modal .head img{width:120px;border-radius:10px;flex-shrink:0}
+  .modal .body{padding:16px;max-height:60vh;overflow:auto}
+  .modal .close{position:absolute;top:20px;right:24px;font-size:22px;cursor:pointer;color:var(--muted)}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;background:var(--panel2);
+    border:1px solid var(--line);margin:2px 4px 2px 0;color:var(--muted)}
+  .qa{background:var(--panel2);border-radius:8px;padding:8px 10px;margin:6px 0;font-size:12.5px}
+  .qa .q{color:var(--accent2);font-weight:600}
+  .empty{color:var(--muted);text-align:center;padding:40px;border:1px dashed var(--line);border-radius:12px}
+  .turnhdr{display:flex;align-items:center;gap:10px;margin:18px 0 8px}
+  .turnhdr .n{width:34px;height:34px;border-radius:50%;background:var(--accent);color:#0b1020;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px}
+  label.fld{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  .flexcol{display:flex;flex-direction:column;gap:2px}
+  .pickbox{position:relative}
+  .picklist{position:absolute;z-index:10;left:0;right:0;top:100%;background:var(--panel2);
+    border:1px solid var(--line);border-radius:8px;max-height:240px;overflow:auto;display:none}
+  .picklist.show{display:block}
+  .pickitem{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer}
+  .pickitem:hover{background:var(--panel)}
+  .pickitem img{width:30px;height:30px;border-radius:5px;object-fit:cover}
+  .note{background:rgba(109,139,255,.1);border:1px solid var(--accent);border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:14px}
+  /* deck builder */
+  .decklayout{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+  .deckside{position:sticky;top:120px}
+  .poolgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+  .pcard{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;transition:.1s}
+  .pcard:hover{border-color:var(--accent)}
+  .pcard img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--panel2)}
+  .pcard .pn{padding:5px 6px;font-size:11px;line-height:1.25;height:2.5em;overflow:hidden}
+  .pcard .inbadge{position:absolute;top:4px;right:4px;background:var(--ok);color:#062;font-weight:800;
+    font-size:12px;border-radius:6px;padding:1px 6px;display:none}
+  .pcard.has .inbadge{display:block}
+  .pcard .pcost{position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:var(--accent);
+    color:#0b1020;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:11px}
+  .pcard .info{position:absolute;bottom:2.6em;right:4px;background:rgba(0,0,0,.6);color:#fff;border-radius:50%;
+    width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:11px}
+  .deckhdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .deckhdr .cnt{font-size:22px;font-weight:800}
+  .deckhdr .cnt.full{color:var(--ok)} .deckhdr .cnt.over{color:var(--danger)}
+  .curve{display:flex;align-items:flex-end;gap:3px;height:60px;margin:8px 0;padding:6px;background:var(--panel2);border-radius:8px}
+  .curve .bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;height:100%}
+  .curve .bar .b{width:100%;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
+  .curve .bar .lbl{font-size:9px;color:var(--muted)}
+  .curve .bar .num{font-size:9px;color:var(--txt)}
+  .dtypes{display:flex;gap:6px;font-size:11px;color:var(--muted);margin-bottom:10px;flex-wrap:wrap}
+  .drow{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:7px;margin-bottom:3px;background:var(--panel2)}
+  .drow .dc{width:20px;height:20px;border-radius:50%;background:var(--accent);color:#0b1020;font-weight:700;
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+  .drow .dn{flex:1;font-size:12px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .drow .dn:hover{color:var(--accent)}
+  .drow .qc{display:flex;align-items:center;gap:5px}
+  .drow .qc button{width:20px;height:20px;border-radius:5px;border:1px solid var(--line);background:var(--panel);
+    color:var(--txt);cursor:pointer;font-weight:700;line-height:1;padding:0}
+  .savedeck{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel2);border-radius:7px;margin-bottom:4px}
+  .savedeck .sn{flex:1;cursor:pointer;font-size:12.5px} .savedeck .sn:hover{color:var(--accent)}
+  @media(max-width:820px){.decklayout{grid-template-columns:1fr}.deckside{position:static}}
+  @media(max-width:520px){.modal .head{flex-direction:column}.modal .head img{width:100px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">🃏 シャドバ ビヨンド 学習ノート <small>Shadowverse: Worlds Beyond study tool</small></div>
+  <nav>
+    <button data-tab="cards" class="active">カード</button>
+    <button data-tab="deck">デッキ作成</button>
+    <button data-tab="combos">コンボ・シナジー</button>
+    <button data-tab="matchup">マッチアップ</button>
+    <button data-tab="turns">ターン別</button>
+    <button data-tab="data">データ</button>
+  </nav>
+</header>
+<main>
+
+  <!-- CARDS -->
+  <section id="tab-cards" class="tab active">
+    <div class="filters">
+      <input type="text" id="q" placeholder="カード名・効果テキストで検索…">
+      <select id="fClass"><option value="">全クラス</option></select>
+      <select id="fType"><option value="">全タイプ</option></select>
+      <select id="fCost"><option value="">全コスト</option></select>
+      <select id="fRarity"><option value="">全レア</option></select>
+      <select id="fTribe"><option value="">全種族</option></select>
+      <select id="fRot"><option value="">ローテ+アンリミ</option><option value="1">ローテのみ</option></select>
+      <label class="row" style="gap:4px;font-size:12px;color:var(--muted)"><input type="checkbox" id="fToken" style="width:auto"> トークンも表示</label>
+    </div>
+    <div class="count" id="cardCount"></div>
+    <div class="grid" id="cardGrid"></div>
+  </section>
+
+  <!-- DECK BUILDER -->
+  <section id="tab-deck" class="tab">
+    <h2>デッキ作成</h2>
+    <div class="note">クラスを選ぶとそのクラス＋ニュートラルのカードが並びます。カードをクリックで追加、右側で枚数調整。<b>40枚・同名3枚まで</b>。作ったデッキは保存でき、「データ」タブでまとめて書き出せます。</div>
+    <div class="decklayout">
+      <!-- pool -->
+      <div>
+        <div class="filters">
+          <select id="dClass"></select>
+          <input type="text" id="dq" placeholder="カード名・効果で検索…">
+          <select id="dType"><option value="">全タイプ</option></select>
+          <select id="dCost"><option value="">全コスト</option></select>
+          <select id="dRarity"><option value="">全レア</option></select>
+          <select id="dTribe"><option value="">全種族</option></select>
+          <select id="dRot"><option value="">ローテ+アンリミ</option><option value="1">ローテのみ</option></select>
+        </div>
+        <div class="count" id="poolCount"></div>
+        <div class="poolgrid" id="poolGrid"></div>
+      </div>
+      <!-- deck side -->
+      <div class="deckside">
+        <div class="panel" style="margin-bottom:10px">
+          <div class="row" style="margin-bottom:8px">
+            <input type="text" id="deckName" placeholder="デッキ名" style="flex:1;min-width:0">
+          </div>
+          <div class="deckhdr"><span id="deckClassName" class="muted">クラス未選択</span>
+            <span><span id="deckCount" class="cnt">0</span><span class="muted"> / 40</span></span></div>
+          <div class="curve" id="deckCurve"></div>
+          <div class="dtypes" id="deckTypes"></div>
+          <div class="row" style="margin-bottom:8px">
+            <button class="btn mini" id="deckSave">保存</button>
+            <button class="ghost mini" id="deckNew">新規</button>
+            <button class="del mini" id="deckClear">空にする</button>
+          </div>
+          <div id="deckList"><div class="empty" style="padding:20px">カードを追加してください</div></div>
+        </div>
+        <div class="panel">
+          <h3 style="margin-top:0">保存済みデッキ</h3>
+          <div id="savedDecks"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMBOS -->
+  <section id="tab-combos" class="tab">
+    <h2>コンボ・シナジー学習</h2>
+    <div class="note">「このカード＋このカードで何が起きるか」を自分の言葉で登録して蓄積します。下部の<b>種族シナジー</b>は同じ種族のカードを自動でまとめて表示します。</div>
+    <div class="panel">
+      <h3 style="margin-top:0">＋ コンボを登録</h3>
+      <div class="row">
+        <input type="text" id="comboName" placeholder="コンボ名（例：アーティファクト展開ループ）" style="flex:1;min-width:200px">
+        <select id="comboClass"></select>
+      </div>
+      <label class="fld">関係するカード（検索して追加）</label>
+      <div class="pickbox">
+        <input type="text" id="comboPick" placeholder="カード名で検索…" style="width:100%">
+        <div class="picklist" id="comboPickList"></div>
+      </div>
+      <div id="comboPicked" style="margin-top:8px"></div>
+      <label class="fld">動き・解説</label>
+      <textarea id="comboDesc" placeholder="どの順番で出すと何が起きるか、必要PP、注意点など"></textarea>
+      <div class="row" style="margin-top:10px"><button class="btn" id="comboSave">保存</button></div>
+    </div>
+    <h3>登録済みコンボ</h3>
+    <div id="comboList"></div>
+    <h3>種族シナジー（自動）</h3>
+    <div id="tribeSyn"></div>
+  </section>
+
+  <!-- MATCHUP -->
+  <section id="tab-matchup" class="tab">
+    <h2>マッチアップ（相手デッキ対策）</h2>
+    <div class="note">相手クラスを選び、想定される動き・キツいカード・こちらの立ち回り・マリガンを書き溜めます。内容は自動保存されます。</div>
+    <div class="row" style="margin-bottom:12px">
+      <label class="muted">相手クラス:</label>
+      <select id="muClass" style="min-width:180px"></select>
+    </div>
+    <div id="muBody"></div>
+  </section>
+
+  <!-- TURNS -->
+  <section id="tab-turns" class="tab">
+    <h2>ターン別チェックポイント</h2>
+    <div class="note">「Nターン目に相手が何をしてくるか／自分が何を準備すべきか」を時系列で登録。相手クラスや汎用でタグ付けできます。</div>
+    <div class="panel">
+      <div class="row">
+        <label class="muted">ターン</label>
+        <select id="tnTurn"></select>
+        <label class="muted">対象</label>
+        <select id="tnClass"></select>
+        <input type="text" id="tnNote" placeholder="注意点（例：相手の疾走リーサル圏内。回復かガードを構える）" style="flex:1;min-width:220px">
+      </div>
+      <label class="fld">注意カード（検索して追加）</label>
+      <div class="pickbox">
+        <input type="text" id="tnPick" placeholder="カード名で検索…" style="width:100%">
+        <div class="picklist" id="tnPickList"></div>
+      </div>
+      <div id="tnPicked" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="tnSave">追加</button>
+        <select id="tnFilter" style="margin-left:auto"><option value="">全対象で表示</option></select>
+      </div>
+    </div>
+    <div id="turnList"></div>
+  </section>
+
+  <!-- DATA -->
+  <section id="tab-data" class="tab">
+    <h2>データ管理</h2>
+    <div class="panel">
+      <h3 style="margin-top:0">あなたの知識（デッキ・コンボ・マッチアップ・ターン別）</h3>
+      <p class="muted">保存先はこのブラウザ内(localStorage)です。端末を変える／GitHubに残す場合は書き出してください。</p>
+      <div class="row">
+        <button class="btn" id="expBtn">JSONで書き出し</button>
+        <button class="ghost" id="impBtn">JSONを読み込み</button>
+        <input type="file" id="impFile" accept="application/json" style="display:none">
+        <button class="del" id="wipeBtn">全消去</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0">カードデータ</h3>
+      <p class="muted">現在 <b id="cardTotal"></b> 枚を <code>cards.js</code> から読み込み（日本語・公式データ）。新弾追加時は <code>generate.py</code> で再生成してください。</p>
+      <div class="row"><button class="ghost" id="refreshBtn">最新カード枚数を確認（公式API）</button></div>
+      <p class="muted" style="font-size:11px;margin-top:8px">取得元: shadowverse-wb.com 公式 CardList API（日本語）／ 画像: static.dotgg.gg</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- card detail modal -->
+<div class="overlay" id="overlay">
+  <div class="modal" style="position:relative">
+    <span class="close" id="modalClose">×</span>
+    <div class="head" id="modalHead"></div>
+    <div class="body" id="modalBody"></div>
+  </div>
+</div>
+
+<script src="cards.js"></script>
+<script>
+/* ============ config / maps ============ */
+const CLASSES = {
+  Neutral:{jp:'ニュートラル',c:'#8a93b0'}, Forestcraft:{jp:'エルフ',c:'#4fbf6b'},
+  Swordcraft:{jp:'ロイヤル',c:'#e0b64a'}, Runecraft:{jp:'ウィッチ',c:'#7ea6ff'},
+  Dragoncraft:{jp:'ドラゴン',c:'#e08a4a'}, Abysscraft:{jp:'ナイトメア',c:'#b06bd8'},
+  Havencraft:{jp:'ビショップ',c:'#e8e2c8'}, Portalcraft:{jp:'ネメシス',c:'#4fc9d1'}
+};
+const RARITY={ '1':'ブロンズ','2':'シルバー','3':'ゴールド','4':'レジェンド' };
+const TYPE={ 'Follower':'フォロワー','Spell':'スペル','Amulet':'アミュレット' };
+const CARDS = (window.CARD_DATA||[]);
+const byId = Object.fromEntries(CARDS.map(c=>[c.id,c]));
+
+/* ============ storage ============ */
+const DB = {
+  load(){ try{return JSON.parse(localStorage.getItem('svwb_kb'))||{}}catch(e){return{}} },
+  save(){ localStorage.setItem('svwb_kb',JSON.stringify(state)); },
+};
+let state = Object.assign({combos:[],matchups:{},turns:[],decks:[]}, DB.load());
+function persist(){ DB.save(); }
+
+/* ============ helpers ============ */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>(s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+function renderSkill(t){
+  if(!t) return '';
+  // trusted static source: convert known tags
+  return esc(t)
+    .replace(/&lt;b&gt;/g,'<b>').replace(/&lt;\/b&gt;/g,'</b>')
+    .replace(/&lt;i&gt;/g,'<i>').replace(/&lt;\/i&gt;/g,'</i>')
+    .replace(/&lt;color=Keyword&gt;/g,'<span class="kw">').replace(/&lt;color=[^&]*&gt;/g,'<span class="kw">')
+    .replace(/&lt;\/color&gt;/g,'</span>')
+    .replace(/&lt;hr&gt;/g,'<div class="div"></div>')
+    .replace(/\n/g,'<br>');
+}
+function clsBadge(c){const cl=CLASSES[c.color]||{jp:c.color,c:'#888'};return `<span class="cls-badge" style="color:${cl.c}">${cl.jp}</span>`;}
+function classOptions(sel,includeGeneral){
+  let h = includeGeneral?'<option value="general">汎用（全般）</option>':'<option value="">クラス未指定</option>';
+  for(const k in CLASSES) h+=`<option value="${k}">${CLASSES[k].jp}</option>`;
+  sel.innerHTML=h;
+}
+
+/* ============ tabs ============ */
+$$('nav button').forEach(b=>b.onclick=()=>{
+  $$('nav button').forEach(x=>x.classList.toggle('active',x===b));
+  $$('.tab').forEach(t=>t.classList.remove('active'));
+  $('#tab-'+b.dataset.tab).classList.add('active');
+});
+
+/* ============ CARD BROWSER ============ */
+function initFilters(){
+  const cSel=$('#fClass'); for(const k in CLASSES) cSel.innerHTML+=`<option value="${k}">${CLASSES[k].jp}</option>`;
+  const tSel=$('#fType'); for(const k in TYPE) tSel.innerHTML+=`<option value="${k}">${TYPE[k]}</option>`;
+  const costs=[...new Set(CARDS.map(c=>+c.cost))].sort((a,b)=>a-b);
+  costs.forEach(c=>$('#fCost').innerHTML+=`<option value="${c}">${c}コスト${c>=8?'+':''}</option>`);
+  for(const k in RARITY) $('#fRarity').innerHTML+=`<option value="${k}">${RARITY[k]}</option>`;
+  const tribes=[...new Set(CARDS.flatMap(c=>c.tribes||[]))].sort();
+  tribes.forEach(t=>$('#fTribe').innerHTML+=`<option value="${t}">${t}</option>`);
+  ['#q','#fClass','#fType','#fCost','#fRarity','#fTribe','#fRot','#fToken'].forEach(s=>{
+    const el=$(s); el.addEventListener(el.type==='checkbox'?'change':'input',renderCards);
+  });
+}
+function filterCards(){
+  const q=$('#q').value.trim().toLowerCase(), cl=$('#fClass').value, ty=$('#fType').value,
+    co=$('#fCost').value, ra=$('#fRarity').value, tr=$('#fTribe').value, rot=$('#fRot').value,
+    tok=$('#fToken').checked;
+  return CARDS.filter(c=>{
+    if(!tok && c.is_token==='1') return false;
+    if(cl && c.color!==cl) return false;
+    if(ty && c.type!==ty) return false;
+    if(co && +c.cost!==+co) return false;
+    if(ra && c.rarity!==ra) return false;
+    if(tr && !(c.tribes||[]).includes(tr)) return false;
+    if(rot==='1' && c.is_include_rotation!=='1') return false;
+    if(q){ const hay=(c.name+' '+(c.skill_text||'')+' '+(c.evo_skill_text||'')).toLowerCase();
+      if(!hay.includes(q)) return false; }
+    return true;
+  });
+}
+function cardHTML(c){
+  return `<div class="card" data-id="${c.id}">
+    ${clsBadge(c)}<div class="cost-badge">${c.cost}</div>
+    <img class="img" loading="lazy" src="${c.image||''}" onerror="this.style.opacity=.15">
+    <div class="meta"><div class="nm">${esc(c.name)}</div>
+    <div class="sub"><span>${TYPE[c.type]||c.type}</span><span>${c.type==='Follower'?c.atk+'/'+c.life:''}</span></div>
+    </div></div>`;
+}
+function renderCards(){
+  const list=filterCards();
+  $('#cardCount').textContent=`${list.length} 枚`;
+  $('#cardGrid').innerHTML=list.map(cardHTML).join('');
+}
+$('#cardGrid').addEventListener('click',e=>{
+  const el=e.target.closest('.card'); if(el) openCard(el.dataset.id);
+});
+function openCard(id){
+  const c=byId[id]; if(!c) return; const cl=CLASSES[c.color]||{jp:c.color,c:'#888'};
+  $('#modalHead').innerHTML=`<img src="${c.image||''}" onerror="this.style.display='none'">
+    <div><div style="font-size:18px;font-weight:700">${esc(c.name)}</div>
+    <div style="margin:8px 0">
+      <span class="tag" style="color:${cl.c}">${cl.jp}</span>
+      <span class="tag">${TYPE[c.type]||c.type}</span>
+      <span class="tag">${c.cost}コスト</span>
+      ${c.type==='Follower'?`<span class="tag">${c.atk}/${c.life}</span>`:''}
+      <span class="tag">${RARITY[c.rarity]||''}</span>
+      <span class="tag">${esc(c.set_name)}</span>
+      <span class="tag">${c.is_include_rotation==='1'?'ローテ':'アンリミ'}</span>
+    </div>
+    ${(c.tribes||[]).map(t=>`<span class="tag" style="color:var(--accent2)">${t}</span>`).join('')}
+    </div>`;
+  let body=`<div>${renderSkill(c.skill_text)}</div>`;
+  if(c.evo_skill_text) body+=`<h3>進化後</h3><div>${renderSkill(c.evo_skill_text)}</div>`;
+  if(c.questions&&c.questions.length){ body+=`<h3>公式Q&amp;A</h3>`;
+    c.questions.forEach(q=>body+=`<div class="qa"><div class="q">Q. ${esc(q.question)}</div><div>A. ${esc(q.answer)}</div></div>`);}
+  if(c.related_cards&&c.related_cards.length){
+    const rc=c.related_cards.map(r=>byId[r]||byId[String(r)]).filter(Boolean);
+    if(rc.length){ body+=`<h3>関連カード</h3>`+rc.map(r=>miniCard(r.id,true)).join(''); }
+  }
+  if(c.flavour_text) body+=`<div class="div"></div><div class="muted" style="font-size:12px;font-style:italic">${esc(c.flavour_text)}</div>`;
+  $('#modalBody').innerHTML=body;
+  $('#overlay').classList.add('show');
+}
+$('#modalClose').onclick=()=>$('#overlay').classList.remove('show');
+$('#overlay').onclick=e=>{if(e.target.id==='overlay')$('#overlay').classList.remove('show')};
+function miniCard(id,clickable){
+  const c=byId[id]; if(!c) return '';
+  return `<span class="cardmini" ${clickable?`onclick="openCard('${id}')"`:''}>
+    <img src="${c.image||''}" onerror="this.style.visibility='hidden'">${esc(c.name)}</span>`;
+}
+
+/* ============ generic card picker ============ */
+function setupPicker(inputSel,listSel,onPick){
+  const inp=$(inputSel), list=$(listSel);
+  inp.addEventListener('input',()=>{
+    const q=inp.value.trim().toLowerCase();
+    if(!q){list.classList.remove('show');return;}
+    const res=CARDS.filter(c=>c.is_token!=='1'&&c.name.toLowerCase().includes(q)).slice(0,12);
+    list.innerHTML=res.map(c=>`<div class="pickitem" data-id="${c.id}">
+      <img src="${c.image||''}" onerror="this.style.visibility='hidden'">
+      <span>${esc(c.name)} <span class="muted">(${c.cost}/${CLASSES[c.color]?.jp||c.color})</span></span></div>`).join('')
+      ||'<div class="pickitem muted">該当なし</div>';
+    list.classList.add('show');
+  });
+  list.addEventListener('click',e=>{
+    const it=e.target.closest('.pickitem'); if(!it||!it.dataset.id)return;
+    onPick(it.dataset.id); inp.value=''; list.classList.remove('show');
+  });
+  document.addEventListener('click',e=>{ if(!e.target.closest(inputSel)&&!e.target.closest(listSel)) list.classList.remove('show'); });
+}
+function pickedChips(ids,onRemove){
+  return ids.map(id=>{const c=byId[id];if(!c)return'';
+    return `<span class="chip">${esc(c.name)}<span class="x" data-id="${id}">×</span></span>`;}).join('');
+}
+
+/* ============ COMBOS ============ */
+let comboDraft=[];
+function initCombos(){
+  classOptions($('#comboClass'),false);
+  setupPicker('#comboPick','#comboPickList',id=>{ if(!comboDraft.includes(id))comboDraft.push(id); renderComboDraft();});
+  $('#comboPicked').addEventListener('click',e=>{const x=e.target.closest('.x');if(x){comboDraft=comboDraft.filter(i=>i!==x.dataset.id);renderComboDraft();}});
+  $('#comboSave').onclick=()=>{
+    const name=$('#comboName').value.trim(); if(!name){alert('コンボ名を入れてください');return;}
+    state.combos.push({id:Date.now(),name,cls:$('#comboClass').value,cards:[...comboDraft],desc:$('#comboDesc').value.trim()});
+    persist(); $('#comboName').value='';$('#comboDesc').value='';comboDraft=[];renderComboDraft();renderComboList();
+  };
+  renderComboList(); renderTribeSyn();
+}
+function renderComboDraft(){ $('#comboPicked').innerHTML=pickedChips(comboDraft); }
+function renderComboList(){
+  const el=$('#comboList');
+  if(!state.combos.length){el.innerHTML='<div class="empty">まだ登録がありません</div>';return;}
+  el.innerHTML=state.combos.slice().reverse().map(c=>{
+    const cl=CLASSES[c.cls];
+    return `<div class="panel"><div class="row" style="justify-content:space-between">
+      <b>${esc(c.name)} ${cl?`<span class="tag" style="color:${cl.c}">${cl.jp}</span>`:''}</b>
+      <button class="del mini" data-del="${c.id}">削除</button></div>
+      <div style="margin:8px 0">${c.cards.map(id=>miniCard(id,true)).join('')}</div>
+      ${c.desc?`<div>${esc(c.desc).replace(/\n/g,'<br>')}</div>`:''}</div>`;
+  }).join('');
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+    state.combos=state.combos.filter(x=>x.id!=b.dataset.del);persist();renderComboList();});
+}
+function renderTribeSyn(){
+  const tribes={};
+  CARDS.filter(c=>c.is_token!=='1').forEach(c=>(c.tribes||[]).forEach(t=>{(tribes[t]=tribes[t]||[]).push(c);}));
+  const el=$('#tribeSyn');
+  el.innerHTML=Object.keys(tribes).sort().map(t=>{
+    const cards=tribes[t];
+    return `<details class="panel" style="padding:10px 14px"><summary style="cursor:pointer;font-weight:600">
+      ${t} <span class="muted">(${cards.length}枚)</span></summary>
+      <div style="margin-top:8px">${cards.map(c=>miniCard(c.id,true)).join('')}</div></details>`;
+  }).join('');
+}
+
+/* ============ MATCHUP ============ */
+const MU_FIELDS=[
+  ['plan','相手のゲームプラン（何を狙ってくるか）'],
+  ['key','キツいカード / キーカード'],
+  ['play','こちらの立ち回り・勝ち筋'],
+  ['mull','マリガン（キープ基準）']
+];
+function initMatchup(){
+  classOptions($('#muClass'),false);
+  $('#muClass').querySelector('option[value=""]').textContent='相手クラスを選択';
+  $('#muClass').onchange=renderMatchup;
+  renderMatchup();
+}
+function renderMatchup(){
+  const cls=$('#muClass').value, el=$('#muBody');
+  if(!cls){el.innerHTML='<div class="empty">相手クラスを選ぶと対策メモを編集できます</div>';return;}
+  const data=state.matchups[cls]||{};
+  const cl=CLASSES[cls];
+  el.innerHTML=`<div class="panel"><h3 style="margin-top:0;color:${cl.c}">vs ${cl.jp}</h3>`+
+    MU_FIELDS.map(([k,label])=>`<label class="fld">${label}</label>
+      <textarea data-mu="${k}">${esc(data[k]||'')}</textarea>`).join('')+
+    `<div class="muted" style="font-size:11px;margin-top:8px">自動保存されます</div></div>`;
+  el.querySelectorAll('[data-mu]').forEach(t=>t.addEventListener('input',()=>{
+    state.matchups[cls]=state.matchups[cls]||{};
+    state.matchups[cls][t.dataset.mu]=t.value; persist();
+  }));
+}
+
+/* ============ TURNS ============ */
+let tnDraft=[];
+function initTurns(){
+  for(let i=1;i<=10;i++) $('#tnTurn').innerHTML+=`<option value="${i}">${i}ターン目${i===10?'+':''}</option>`;
+  classOptions($('#tnClass'),true); classOptions($('#tnFilter'),true);
+  $('#tnFilter').querySelector('option[value="general"]').remove();
+  $('#tnFilter').insertAdjacentHTML('afterbegin','<option value="">全対象で表示</option>');
+  $('#tnFilter').value='';
+  setupPicker('#tnPick','#tnPickList',id=>{if(!tnDraft.includes(id))tnDraft.push(id);renderTnDraft();});
+  $('#tnPicked').addEventListener('click',e=>{const x=e.target.closest('.x');if(x){tnDraft=tnDraft.filter(i=>i!==x.dataset.id);renderTnDraft();}});
+  $('#tnSave').onclick=()=>{
+    const note=$('#tnNote').value.trim(); if(!note){alert('注意点を入力してください');return;}
+    state.turns.push({id:Date.now(),turn:+$('#tnTurn').value,cls:$('#tnClass').value,note,cards:[...tnDraft]});
+    persist();$('#tnNote').value='';tnDraft=[];renderTnDraft();renderTurns();
+  };
+  $('#tnFilter').onchange=renderTurns;
+  renderTurns();
+}
+function renderTnDraft(){ $('#tnPicked').innerHTML=pickedChips(tnDraft); }
+function renderTurns(){
+  const el=$('#turnList'), f=$('#tnFilter').value;
+  let items=state.turns.filter(t=>!f||t.cls===f);
+  if(!items.length){el.innerHTML='<div class="empty">まだ登録がありません</div>';return;}
+  let html='';
+  for(let turn=1;turn<=10;turn++){
+    const g=items.filter(t=>t.turn===turn); if(!g.length)continue;
+    html+=`<div class="turnhdr"><div class="n">${turn}</div><b>${turn}ターン目${turn===10?'以降':''}</b></div>`;
+    html+=g.map(t=>{const cl=t.cls==='general'?{jp:'汎用',c:'var(--muted)'}:CLASSES[t.cls];
+      return `<div class="panel"><div class="row" style="justify-content:space-between">
+        <span class="tag" style="color:${cl.c}">${cl.jp}</span>
+        <button class="del mini" data-del="${t.id}">削除</button></div>
+        <div style="margin:6px 0">${esc(t.note).replace(/\n/g,'<br>')}</div>
+        ${t.cards.length?`<div>${t.cards.map(id=>miniCard(id,true)).join('')}</div>`:''}</div>`;
+    }).join('');
+  }
+  el.innerHTML=html;
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+    state.turns=state.turns.filter(x=>x.id!=b.dataset.del);persist();renderTurns();});
+}
+
+/* ============ DATA ============ */
+function initData(){
+  $('#cardTotal').textContent=CARDS.length;
+  $('#expBtn').onclick=()=>{
+    const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download='svwb-knowledge-'+new Date().toISOString().slice(0,10)+'.json';a.click();
+  };
+  $('#impBtn').onclick=()=>$('#impFile').click();
+  $('#impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+    r.onload=()=>{try{const d=JSON.parse(r.result);
+      state=Object.assign({combos:[],matchups:{},turns:[],decks:[]},d);persist();
+      renderComboList();renderMatchup();renderTurns();renderSavedDecks();alert('読み込みました');
+    }catch(err){alert('読み込み失敗: '+err.message);}};r.readAsText(f);};
+  $('#wipeBtn').onclick=()=>{if(confirm('コンボ・マッチアップ・ターン別・デッキを全消去します。よろしいですか？')){
+    state={combos:[],matchups:{},turns:[],decks:[]};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();}};
+  $('#refreshBtn').onclick=async()=>{
+    try{const res=await fetch('https://shadowverse-wb.com/web/CardList/cardList?lang=ja');
+      const j=await res.json();const total=j.data&&j.data.count;
+      alert('公式の登録カード総数: '+total+'枚\n現在このアプリ: '+CARDS.length+'枚\n新弾を反映するには generate.py を再実行して cards.js を差し替えてください。');
+    }catch(e){alert('確認失敗: '+e.message+'\n(ブラウザのCORS制限で失敗する場合があります。generate.py で更新してください)');}
+  };
+}
+
+/* ============ DECK BUILDER ============ */
+const MAXCOPY=3, DECKSIZE=40;
+let curDeck={id:null,name:'',cls:'',cards:{}}; // cards: {id:count}
+function deckTotal(){ return Object.values(curDeck.cards).reduce((a,b)=>a+b,0); }
+function initDeck(){
+  const cs=$('#dClass'); cs.innerHTML='<option value="">クラスを選択</option>';
+  for(const k in CLASSES){ if(k==='Neutral')continue; cs.innerHTML+=`<option value="${k}">${CLASSES[k].jp}</option>`; }
+  for(const k in TYPE) $('#dType').innerHTML+=`<option value="${k}">${TYPE[k]}</option>`;
+  [...new Set(CARDS.map(c=>+c.cost))].sort((a,b)=>a-b).forEach(c=>$('#dCost').innerHTML+=`<option value="${c}">${c}コスト</option>`);
+  for(const k in RARITY) $('#dRarity').innerHTML+=`<option value="${k}">${RARITY[k]}</option>`;
+  [...new Set(CARDS.flatMap(c=>c.tribes||[]))].sort().forEach(t=>$('#dTribe').innerHTML+=`<option value="${t}">${t}</option>`);
+  $('#dClass').onchange=()=>{
+    const nc=$('#dClass').value;
+    if(deckTotal()>0 && curDeck.cls && nc!==curDeck.cls){
+      if(!confirm('クラスを変えると現在のデッキ内容はクリアされます。よろしいですか？')){ $('#dClass').value=curDeck.cls; return; }
+      curDeck.cards={};
+    }
+    curDeck.cls=nc; renderPool(); renderDeck();
+  };
+  ['#dq','#dType','#dCost','#dRarity','#dTribe','#dRot'].forEach(s=>$(s).addEventListener('input',renderPool));
+  $('#poolGrid').addEventListener('click',e=>{
+    const info=e.target.closest('.info'); if(info){ openCard(info.dataset.id); e.stopPropagation(); return; }
+    const el=e.target.closest('.pcard'); if(el) addToDeck(el.dataset.id);
+  });
+  $('#deckList').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(b){ b.dataset.plus!==undefined?addToDeck(b.dataset.plus):removeFromDeck(b.dataset.minus); return; }
+    const n=e.target.closest('.dn'); if(n) openCard(n.dataset.id);
+  });
+  $('#deckName').addEventListener('input',()=>curDeck.name=$('#deckName').value);
+  $('#deckSave').onclick=saveDeck;
+  $('#deckNew').onclick=()=>{ if(deckTotal()&&!confirm('編集中の内容を破棄して新規作成しますか？'))return;
+    curDeck={id:null,name:'',cls:$('#dClass').value,cards:{}}; $('#deckName').value=''; renderPool(); renderDeck(); };
+  $('#deckClear').onclick=()=>{ if(confirm('デッキを空にしますか？')){ curDeck.cards={}; renderPool(); renderDeck(); } };
+  renderPool(); renderDeck(); renderSavedDecks();
+}
+function deckPool(){
+  const cls=$('#dClass').value;
+  const q=$('#dq').value.trim().toLowerCase(), ty=$('#dType').value, co=$('#dCost').value,
+    ra=$('#dRarity').value, tr=$('#dTribe').value, rot=$('#dRot').value;
+  return CARDS.filter(c=>{
+    if(c.is_token==='1') return false;
+    if(!cls) return false;
+    if(c.color!=='Neutral' && c.color!==cls) return false;
+    if(ty&&c.type!==ty) return false;
+    if(co&&+c.cost!==+co) return false;
+    if(ra&&c.rarity!==ra) return false;
+    if(tr&&!(c.tribes||[]).includes(tr)) return false;
+    if(rot==='1'&&c.is_include_rotation!=='1') return false;
+    if(q){ const h=(c.name+' '+(c.skill_text||'')).toLowerCase(); if(!h.includes(q))return false; }
+    return true;
+  }).sort((a,b)=>(+a.cost-+b.cost)||a.color.localeCompare(b.color)||a.name.localeCompare(b.name,'ja'));
+}
+function renderPool(){
+  if(!$('#dClass').value){ $('#poolGrid').innerHTML='<div class="empty">まずクラスを選択してください</div>'; $('#poolCount').textContent=''; return; }
+  const list=deckPool();
+  $('#poolCount').textContent=`${list.length} 枚`;
+  $('#poolGrid').innerHTML=list.map(c=>{
+    const n=curDeck.cards[c.id]||0;
+    return `<div class="pcard ${n?'has':''}" data-id="${c.id}">
+      <div class="pcost">${c.cost}</div><div class="inbadge">×${n}</div>
+      <img loading="lazy" src="${c.image||''}" onerror="this.style.opacity=.15">
+      <div class="info" data-id="${c.id}" title="詳細">i</div>
+      <div class="pn">${esc(c.name)}</div></div>`;
+  }).join('');
+}
+function addToDeck(id){
+  const c=byId[id]; if(!c) return;
+  if(deckTotal()>=DECKSIZE){ flash('40枚に達しています'); return; }
+  const n=curDeck.cards[id]||0;
+  if(n>=MAXCOPY){ flash('同名カードは3枚までです'); return; }
+  curDeck.cards[id]=n+1; renderPool(); renderDeck();
+}
+function removeFromDeck(id){
+  if(!curDeck.cards[id]) return;
+  curDeck.cards[id]--; if(curDeck.cards[id]<=0) delete curDeck.cards[id];
+  renderPool(); renderDeck();
+}
+let flashTimer;
+function flash(msg){
+  let el=$('#deckFlash'); if(!el){ el=document.createElement('div'); el.id='deckFlash';
+    el.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--danger);color:#fff;padding:8px 16px;border-radius:8px;z-index:99;font-size:13px'; document.body.appendChild(el); }
+  el.textContent=msg; el.style.display='block'; clearTimeout(flashTimer);
+  flashTimer=setTimeout(()=>el.style.display='none',1500);
+}
+function renderDeck(){
+  const total=deckTotal();
+  const cntEl=$('#deckCount'); cntEl.textContent=total;
+  cntEl.className='cnt'+(total===DECKSIZE?' full':total>DECKSIZE?' over':'');
+  const cl=CLASSES[curDeck.cls];
+  $('#deckClassName').textContent=cl?cl.jp:'クラス未選択';
+  $('#deckClassName').style.color=cl?cl.c:'var(--muted)';
+  // curve
+  const buckets=new Array(9).fill(0);
+  Object.entries(curDeck.cards).forEach(([id,n])=>{ const c=byId[id]; if(c) buckets[Math.min(+c.cost,8)]+=n; });
+  const max=Math.max(1,...buckets);
+  $('#deckCurve').innerHTML=buckets.map((v,i)=>`<div class="bar"><span class="num">${v||''}</span>
+    <div class="b" style="height:${v/max*100}%"></div><span class="lbl">${i===8?'8+':i}</span></div>`).join('');
+  // type counts
+  const tc={Follower:0,Spell:0,Amulet:0};
+  Object.entries(curDeck.cards).forEach(([id,n])=>{ const c=byId[id]; if(c&&tc[c.type]!==undefined) tc[c.type]+=n; });
+  $('#deckTypes').innerHTML=`<span>フォロワー ${tc.Follower}</span><span>スペル ${tc.Spell}</span><span>アミュレット ${tc.Amulet}</span>`;
+  // list grouped by cost
+  const ids=Object.keys(curDeck.cards).sort((a,b)=>(+byId[a].cost-+byId[b].cost)||byId[a].name.localeCompare(byId[b].name,'ja'));
+  $('#deckList').innerHTML = ids.length? ids.map(id=>{ const c=byId[id],n=curDeck.cards[id];
+    return `<div class="drow"><div class="dc">${c.cost}</div>
+      <div class="dn" data-id="${id}" title="${esc(c.name)}">${esc(c.name)}</div>
+      <div class="qc"><button data-minus="${id}">−</button><b>${n}</b><button data-plus="${id}">＋</button></div></div>`;
+  }).join('') : '<div class="empty" style="padding:20px">カードを追加してください</div>';
+}
+function saveDeck(){
+  if(!curDeck.cls){ alert('クラスを選択してください'); return; }
+  if(deckTotal()===0){ alert('カードがありません'); return; }
+  if(!curDeck.name.trim()) curDeck.name=CLASSES[curDeck.cls].jp+'デッキ';
+  if(curDeck.id){ const i=state.decks.findIndex(d=>d.id===curDeck.id);
+    if(i>=0) state.decks[i]={...curDeck,cards:{...curDeck.cards}};
+  } else { curDeck.id=Date.now(); state.decks.push({...curDeck,cards:{...curDeck.cards}}); }
+  persist(); renderSavedDecks();
+  flashOK(deckTotal()===DECKSIZE?'保存しました（40枚）':`保存しました（${deckTotal()}枚）`);
+}
+function flashOK(msg){ let el=$('#deckFlash'); if(!el){el=document.createElement('div');el.id='deckFlash';
+  el.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);color:#062;padding:8px 16px;border-radius:8px;z-index:99;font-size:13px';document.body.appendChild(el);}
+  el.style.background='var(--ok)'; el.textContent=msg; el.style.display='block'; clearTimeout(flashTimer);
+  flashTimer=setTimeout(()=>{el.style.display='none';el.style.background='var(--danger)';},1500); }
+function renderSavedDecks(){
+  const el=$('#savedDecks'); if(!el) return;
+  if(!state.decks.length){ el.innerHTML='<div class="muted" style="font-size:12px">保存済みデッキはありません</div>'; return; }
+  el.innerHTML=state.decks.map(d=>{ const cl=CLASSES[d.cls]||{jp:'?',c:'#888'};
+    const tot=Object.values(d.cards).reduce((a,b)=>a+b,0);
+    return `<div class="savedeck"><span class="sn" data-load="${d.id}">
+      <b style="color:${cl.c}">${cl.jp}</b> ${esc(d.name)} <span class="muted">${tot}枚</span></span>
+      <button class="del mini" data-deldeck="${d.id}">削除</button></div>`;
+  }).join('');
+  el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>loadDeck(+b.dataset.load));
+  el.querySelectorAll('[data-deldeck]').forEach(b=>b.onclick=()=>{
+    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); } });
+}
+function loadDeck(id){
+  const d=state.decks.find(x=>x.id===id); if(!d) return;
+  curDeck={id:d.id,name:d.name,cls:d.cls,cards:{...d.cards}};
+  $('#dClass').value=d.cls; $('#deckName').value=d.name;
+  document.querySelector('nav button[data-tab="deck"]').click();
+  renderPool(); renderDeck();
+}
+
+/* ============ boot ============ */
+initFilters(); renderCards();
+initDeck(); initCombos(); initMatchup(); initTurns(); initData();
+</script>
+</body>
+</html>
