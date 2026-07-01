@@ -263,6 +263,8 @@
         <button class="segbtn" id="adDraw" data-pd="draw">後攻</button>
       </div>
       <select id="adOpp" style="min-width:180px"></select>
+      <label class="muted" style="font-size:12px">ターン/PP</label>
+      <input type="number" id="adTurn" min="1" max="10" value="4" style="width:64px">
     </div>
     <div id="adBody"></div>
   </section>
@@ -1008,7 +1010,7 @@ function importRecipe(metaId){
   $('#adDeck').value=deck.id; renderAdvisor();
   flashOK('取り込みました：'+deck.name);
 }
-let adPD='play';
+let adPD='play', adTurn=4;
 function initAdvisor(){
   const sel=$('#adDeck'), cur=sel.value;
   sel.innerHTML='<option value="">自分のデッキを選択</option>'+state.decks.map(d=>{
@@ -1018,9 +1020,34 @@ function initAdvisor(){
   opp.innerHTML='<option value="">相手デッキを選択</option>'+META_DECKS.map(m=>`<option value="${m.id}">Tier${m.tier} ${m.name}</option>`).join('');
   if(oc) opp.value=oc;
   sel.onchange=renderAdvisor; opp.onchange=renderAdvisor;
+  $('#adTurn').oninput=()=>{ adTurn=Math.max(1,Math.min(10,+$('#adTurn').value||1)); renderAdvisor(); };
   $('#adPlay').onclick=()=>{adPD='play';$('#adPlay').classList.add('active');$('#adDraw').classList.remove('active');renderAdvisor();};
   $('#adDraw').onclick=()=>{adPD='draw';$('#adDraw').classList.add('active');$('#adPlay').classList.remove('active');renderAdvisor();};
   renderAdvisor();
+}
+// ===== phase2: 確率計算＆アクション最適化 =====
+function comb(n,k){ if(k<0||k>n)return 0; k=Math.min(k,n-k); let r=1; for(let i=0;i<k;i++) r=r*(n-i)/(i+1); return r; }
+function pAtLeastOne(copies,seen,N=40){ if(seen<=0||copies<=0)return 0; const p=1-comb(N-copies,seen)/comb(N,seen); return Math.max(0,Math.min(1,p)); }
+function playValue(c,opp){
+  const cost=+c.cost, R=cardRoles(c), th=(opp&&opp.threat)||[]; let v=cost; // PPを使う＝テンポ価値
+  if(R.includes('develop')) v+=1.5;
+  if(R.includes('removal')) v+= (th.includes('board')||th.includes('tempo')||th.includes('evolve'))?3:1.5;
+  if(R.includes('guard'))  v+= (th.includes('board')||th.includes('tempo')||th.includes('burst'))?2:1;
+  if(R.includes('draw'))   v+=1;
+  if(R.includes('finisher')&&cost>=7) v+=2;
+  return v;
+}
+function bestLines(hand,PP,opp){
+  const items=hand.slice(0,12), n=items.length, lines=[];
+  for(let mask=0;mask<(1<<n);mask++){
+    let cost=0,val=0,cards=[];
+    for(let i=0;i<n;i++) if(mask&(1<<i)){ cost+=+items[i].cost; val+=playValue(items[i],opp); cards.push(items[i]); }
+    if(cost<=PP && cards.length) lines.push({cards,cost,val});
+  }
+  lines.sort((a,b)=> b.val-a.val || b.cost-a.cost || a.cards.length-b.cards.length);
+  const out=[], seen=new Set();
+  for(const l of lines){ const k=l.cards.map(c=>c.id).sort().join(','); if(seen.has(k))continue; seen.add(k); out.push(l); if(out.length>=3)break; }
+  return out;
 }
 // カードの役割判定
 function cardRoles(c){
@@ -1089,11 +1116,15 @@ function renderAdvisor(){
     html+=`<div class="anz" style="margin-top:10px"><h4>この対面の方針（${pdLabel}）</h4><div class="txt">${esc(opp.plan)}</div>
       <div class="txt" style="margin-top:6px;color:var(--accent2)">警戒: ${esc(opp.watch)}</div></div></div>`;
   }
+  // ② 相手の警戒カード（確率）
+  if(opp) html+=threatPanelHTML(opp);
   // hand mode
-  html+=`<div class="panel"><h3 style="margin-top:0">手札を入れて診断（引いた札を選択）</h3>
+  html+=`<div class="panel"><h3 style="margin-top:0">手札を入れて診断（引いた札を選択・最大9枚）</h3>
     <div class="handpick" id="adHandPick">${uniq.sort((a,b)=>+a.cost-+b.cost).map(c=>`<span class="hp ${adHand.includes(c.id)?'sel':''}" data-id="${c.id}">
       <img src="${c.image||''}" onerror="this.style.visibility='hidden'">${esc(c.name)}<span class="muted">(${c.cost})</span></span>`).join('')}</div>
     <div id="adHandResult"></div></div>`;
+  // ① 今ターンの推奨アクション
+  html+=actionPanelHTML(opp);
   // mulligan ranking
   html+=`<div class="panel"><h3 style="margin-top:0">マリガン キープ推奨度（${pdLabel}${opp?' / vs '+opp.name:''}）</h3>`;
   html+=scored.slice(0,14).map(x=>keepRowHTML(x)).join('');
@@ -1102,7 +1133,7 @@ function renderAdvisor(){
   // bind hand pick
   el.querySelectorAll('#adHandPick .hp').forEach(h=>h.onclick=()=>{
     const id=h.dataset.id; if(adHand.includes(id)) adHand=adHand.filter(x=>x!==id);
-    else { if(adHand.length>=4){ flash('手札は4枚まで'); return;} adHand.push(id); }
+    else { if(adHand.length>=9){ flash('手札は9枚まで'); return;} adHand.push(id); }
     renderAdvisor();
   });
   el.querySelectorAll('.keeprow img,[data-open]').forEach(im=>im.onclick=()=>openCard(im.dataset.id));
@@ -1125,6 +1156,48 @@ function renderHandResult(opp){
   box.innerHTML=rows.map(keepRowHTML).join('')+
     `<div class="anz" style="margin-top:8px"><div class="txt">この手札の評価：<b>${keeps}枚キープ推奨</b>。`+
     (keeps===0?'全返しでも可。低コストの引き直しを狙う。':keeps>=3?'good。初動が揃っている。':'低コストが薄いので、キープ以外は返して初動を厚くする。')+'</div></div>';
+}
+// ① 今ターンの推奨アクション（手札＋PP → 最適プレイ順を推奨度%）
+function actionPanelHTML(opp){
+  const PP=adTurn;
+  let h=`<div class="panel"><h3 style="margin-top:0">今ターンの推奨アクション（PP=${PP}）</h3>`;
+  if(adHand.length<1){ return h+`<div class="muted" style="font-size:12px">上の「手札を入れて診断」で今の手札を選ぶと、PP=${PP}で切るべきプレイを推奨度%で提案します。</div></div>`; }
+  const hand=adHand.map(id=>byId[id]).filter(Boolean);
+  const lines=bestLines(hand,PP,opp);
+  if(!lines.length){ return h+`<div class="muted" style="font-size:12px">PP${PP}で出せる札がありません（手札のコストが高い）。ドロー/PP加速を待つか、より軽い札を選択してください。</div></div>`; }
+  const sum=lines.reduce((a,l)=>a+l.val,0)||1;
+  h+=lines.map((l,i)=>{
+    const pct=Math.round(l.val/sum*100);
+    const seq=l.cards.slice().sort((a,b)=>+a.cost-+b.cost);
+    const col=i===0?'var(--ok)':'var(--muted)';
+    return `<div class="keeprow"><div class="pct" style="width:70px;text-align:center"><b style="color:${col};font-size:16px">${pct}%</b>
+        ${i===0?'<div class="verdict v-keep" style="margin-top:2px">推奨</div>':''}</div>
+      <div class="kinfo"><div class="kn" style="flex-wrap:wrap">${seq.map(c=>`<span class="cardmini" onclick="openCard('${c.id}')"><img src="${c.image||''}" onerror="this.style.visibility='hidden'">${esc(c.name)}<span class="muted">(${c.cost})</span></span>`).join('')}</div>
+        <div class="kr">PP ${l.cost}/${PP} 使用${l.cost<PP?`（${PP-l.cost}余り）`:'（使い切り）'}・盤面/テンポ評価 ${l.val.toFixed(1)}</div></div></div>`;
+  }).join('');
+  h+=`<div class="muted" style="font-size:11px;margin-top:6px">※候補プレイの相対推奨度（%は候補間の比較・勝率ではない）。同名カード複数引きや盤面・進化は未考慮の簡易最適化。低コストから順に出す前提。</div></div>`;
+  return h;
+}
+// ② 相手の警戒カード（残り山からの確率）
+function threatPanelHTML(opp){
+  const oppSecond = (adPD==='play'); // 自分が先攻なら相手は後攻
+  const seen = 3 + adTurn + (oppSecond?1:0); // 概算: 初手3 + ターン数ドロー + 後攻+1
+  const rows=(opp.key||[]).map(id=>byId[id]).filter(Boolean).map(c=>{
+    const copies=3; // 仮定: 該当カードは3枚積み
+    const p=pAtLeastOne(copies,Math.min(seen,40));
+    return {c,cost:+c.cost,p,online:(+c.cost<=adTurn)};
+  }).sort((a,b)=> a.cost-b.cost || b.p-a.p);
+  let h=`<div class="panel"><h3 style="margin-top:0">相手の警戒カード（${adPD==='play'?'相手=後攻':'相手=先攻'} / ${adTurn}ターン目時点）</h3>`;
+  h+=rows.map(r=>{
+    const pc=Math.round(r.p*100), col=pc>=60?'var(--danger)':pc>=35?'var(--accent2)':'var(--muted)';
+    return `<div class="keeprow"><img data-id="${r.c.id}" src="${r.c.image||''}" onerror="this.style.visibility='hidden'">
+      <div class="kinfo"><div class="kn"><span class="cst">${r.c.cost}</span>${esc(r.c.name)} ${r.online?'<span class="verdict v-ret" style="background:var(--danger)">今ターン着地圏</span>':`<span class="muted" style="font-size:11px">T${r.c.cost}〜</span>`}</div>
+        <div class="kr">${esc((r.c.skill_text||'').replace(/<[^>]+>/g,'').replace(/\n/g,' ').slice(0,52))}</div>
+        <div class="kbar"><span style="width:${pc}%;background:${col}"></span></div></div>
+      <div class="pct"><b style="color:${col}">${pc}%</b><div class="muted" style="font-size:10px">引いてる確率</div></div></div>`;
+  }).join('');
+  h+=`<div class="muted" style="font-size:11px;margin-top:6px">※40枚・該当カード3枚積み・見えた枚数=初手3＋ターン数(＋後攻1)の概算による超幾何分布。実際の投入枚数やサーチで変動。</div></div>`;
+  return h;
 }
 
 /* ============ boot ============ */
