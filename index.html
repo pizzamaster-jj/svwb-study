@@ -176,6 +176,7 @@
     <button data-tab="combos">コンボ・シナジー</button>
     <button data-tab="matchup">マッチアップ</button>
     <button data-tab="turns">ターン別</button>
+    <button data-tab="battles">対戦記録</button>
     <button data-tab="data">データ</button>
   </nav>
 </header>
@@ -340,11 +341,37 @@
     <div id="turnList"></div>
   </section>
 
+  <!-- BATTLES -->
+  <section id="tab-battles" class="tab">
+    <h2>対戦記録</h2>
+    <div class="note">実戦の結果を記録すると、<b>マッチアップ別の実測勝率</b>が集計され、「プレイング」「アドバイザー」の推定に実績が併記されます。推定を自分のデータで検証・上書きしていく仕組みです。</div>
+    <div class="panel">
+      <h3 style="margin-top:0">＋ 対戦を記録</h3>
+      <div class="row">
+        <select id="btDeck" style="min-width:180px"></select>
+        <select id="btOpp" style="min-width:170px"></select>
+        <select id="btPD"><option value="play">先攻</option><option value="draw">後攻</option></select>
+        <select id="btResult"><option value="win">勝ち</option><option value="lose">負け</option></select>
+        <input type="text" id="btMemo" placeholder="メモ（負け筋・気付き等）" style="flex:1;min-width:180px">
+        <button class="btn" id="btSave">記録</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0">マッチアップ別 実測勝率</h3>
+      <div class="row" style="margin-bottom:8px">
+        <select id="btStatDeck"><option value="">全デッキ合算</option></select>
+      </div>
+      <div id="btStats"></div>
+    </div>
+    <h3>履歴</h3>
+    <div id="btList"></div>
+  </section>
+
   <!-- DATA -->
   <section id="tab-data" class="tab">
     <h2>データ管理</h2>
     <div class="panel">
-      <h3 style="margin-top:0">あなたの知識（デッキ・コンボ・マッチアップ・ターン別）</h3>
+      <h3 style="margin-top:0">あなたの知識（デッキ・プレイング・対戦記録・コンボ・マッチアップ・ターン別）</h3>
       <p class="muted">保存先はこのブラウザ内(localStorage)です。端末を変える／GitHubに残す場合は書き出してください。</p>
       <div class="row">
         <button class="btn" id="expBtn">JSONで書き出し</button>
@@ -396,7 +423,7 @@ const DB = {
   load(){ try{return JSON.parse(localStorage.getItem('svwb_kb'))||{}}catch(e){return{}} },
   save(){ localStorage.setItem('svwb_kb',JSON.stringify(state)); },
 };
-let state = Object.assign({combos:[],matchups:{},turns:[],decks:[],playing:{}}, DB.load());
+let state = Object.assign({combos:[],matchups:{},turns:[],decks:[],playing:{},battles:[]}, DB.load());
 function persist(){ DB.save(); }
 
 /* ============ helpers ============ */
@@ -651,11 +678,11 @@ function initData(){
   $('#impBtn').onclick=()=>$('#impFile').click();
   $('#impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
     r.onload=()=>{try{const d=JSON.parse(r.result);
-      state=Object.assign({combos:[],matchups:{},turns:[],decks:[],playing:{}},d);persist();
-      renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();alert('読み込みました');
+      state=Object.assign({combos:[],matchups:{},turns:[],decks:[],playing:{},battles:[]},d);persist();
+      renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();initBattles();alert('読み込みました');
     }catch(err){alert('読み込み失敗: '+err.message);}};r.readAsText(f);};
-  $('#wipeBtn').onclick=()=>{if(confirm('コンボ・マッチアップ・ターン別・デッキ・プレイングを全消去します。よろしいですか？')){
-    state={combos:[],matchups:{},turns:[],decks:[],playing:{}};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();}};
+  $('#wipeBtn').onclick=()=>{if(confirm('コンボ・マッチアップ・ターン別・デッキ・プレイング・対戦記録を全消去します。よろしいですか？')){
+    state={combos:[],matchups:{},turns:[],decks:[],playing:{},battles:[]};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();initBattles();}};
   $('#refreshBtn').onclick=async()=>{
     try{const res=await fetch('https://shadowverse-wb.com/web/CardList/cardList?lang=ja');
       const j=await res.json();const total=j.data&&j.data.count;
@@ -780,7 +807,7 @@ function saveDeck(){
   if(curDeck.id){ const i=state.decks.findIndex(d=>d.id===curDeck.id);
     if(i>=0) state.decks[i]={...curDeck,cards:{...curDeck.cards}};
   } else { curDeck.id=Date.now(); state.decks.push({...curDeck,cards:{...curDeck.cards}}); }
-  persist(); renderSavedDecks(); initPlaying(); initAdvisor();
+  persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles();
   flashOK(deckTotal()===DECKSIZE?'保存しました（40枚）':`保存しました（${deckTotal()}枚）`);
 }
 function flashOK(msg){ let el=$('#deckFlash'); if(!el){el=document.createElement('div');el.id='deckFlash';
@@ -798,7 +825,7 @@ function renderSavedDecks(){
   }).join('');
   el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>loadDeck(+b.dataset.load));
   el.querySelectorAll('[data-deldeck]').forEach(b=>b.onclick=()=>{
-    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); initPlaying(); initAdvisor(); } });
+    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles(); } });
 }
 function loadDeck(id){
   const d=state.decks.find(x=>x.id===id); if(!d) return;
@@ -913,10 +940,13 @@ function renderPlaying(){
     const cl=CLASSES[m.cls], mm=pl.matchups[m.id]||{};
     const adv=mm.adv||'';
     const advColor=adv==='有利'?'var(--ok)':adv==='不利'?'var(--danger)':'var(--muted)';
+    const rec=recordFor(deckId,m.id);
+    const recChip=rec.n?`<span class="adv" style="color:${rec.w/rec.n>=0.5?'var(--ok)':'var(--danger)'}">実績 ${rec.w}-${rec.l}</span>`:'';
     return `<details class="mudeck"><summary>
       <span class="tierb ${m.tier===2?'t2':''}">Tier${m.tier}</span>
       <span class="mn" style="color:${cl.c}">${m.name}</span>
       <span class="muted" style="font-size:11px">${cl.jp}</span>
+      ${recChip}
       <span class="adv" style="color:${advColor};border-color:${advColor}">${adv||'相性未定'}</span>
     </summary><div class="inner" data-meta="${m.id}">
       <div class="anz"><h4>相手の狙い</h4><div class="txt">${esc(m.plan)}</div></div>
@@ -1011,6 +1041,14 @@ const META_RECIPE={
   combo_royal:[['10722310',3],['10403120',3],['10722110',3],['10522310',3],['10823110',2],['10702110',2],
     ['10403110',1],['10424120',3],['10724110',3],['10722120',3],['10723110',3],['10824110',3],
     ['10423310',1],['10724120',3],['10824120',3],['10404110',1]],
+  // 出典: game8 698541（2026-07時点・ローテ）
+  ramp_dragon:[['10843310',3],['10403120',3],['10644120',3],['10741110',3],['10543310',3],['10304120',1],
+    ['10042310',3],['10344120',3],['10444120',3],['10503310',3],['10644110',3],['10844120',3],
+    ['10744110',3],['10544110',3]],
+  // 出典: game8 781945（2026-07時点・ローテ）
+  spell_witch:[['10031310',3],['10131320',3],['10831120',1],['10831110',3],['10531310',3],['10832310',3],
+    ['10833110',3],['10833310',3],['10832110',3],['10532120',3],['10834110',3],['10834120',3],
+    ['10032120',3],['10534120',3]],
 };
 function importRecipe(metaId){
   const r=META_RECIPE[metaId]; const m=META_DECKS.find(x=>x.id===metaId);
@@ -1019,7 +1057,7 @@ function importRecipe(metaId){
   const total=Object.values(cards).reduce((a,b)=>a+b,0);
   if(!confirm(m.name+'の参考構築（'+total+'枚）を自分のデッキとして保存しますか？')) return;
   const deck={id:Date.now(),name:m.name+'(参考構築)',cls:m.cls,cards};
-  state.decks.push(deck); persist(); renderSavedDecks(); initPlaying(); initAdvisor();
+  state.decks.push(deck); persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles();
   $('#adDeck').value=deck.id; renderAdvisor();
   flashOK('取り込みました：'+deck.name);
 }
@@ -1213,7 +1251,9 @@ function renderAdvisor(){
   if(!opp){ html+='<div class="note" style="border-color:var(--muted)">相手デッキを選ぶと対面補正が入ります（今は'+pdLabel+'・汎用基準で表示中）</div>'; }
   // opponent read
   if(opp){
-    html+=`<div class="panel"><h3 style="margin-top:0">相手（${opp.name}）の想定初動</h3>`;
+    const rec=recordFor(deckId,opp.id);
+    const recTxt=rec.n?` <span class="adv" style="color:${rec.w/rec.n>=0.5?'var(--ok)':'var(--danger)'}">このデッキでの実績 ${rec.w}勝${rec.l}敗</span>`:'';
+    html+=`<div class="panel"><h3 style="margin-top:0">相手（${opp.name}）の想定初動${recTxt}</h3>`;
     (META_OPENING[opp.id]||[]).forEach(([t,d])=>html+=`<div class="openrow"><div class="ot">${t}</div><div class="od">${esc(d)}</div></div>`);
     html+=`<div class="anz" style="margin-top:10px"><h4>この対面の方針（${pdLabel}）</h4><div class="txt">${esc(opp.plan)}</div>
       <div class="txt" style="margin-top:6px;color:var(--accent2)">警戒: ${esc(opp.watch)}</div></div></div>`;
@@ -1305,10 +1345,12 @@ function actionPanelHTML(opp){
 function threatPanelHTML(opp){
   const oppSecond = (adPD==='play'); // 自分が先攻なら相手は後攻
   const seen = 3 + adTurn + (oppSecond?1:0); // 概算: 初手3 + ターン数ドロー + 後攻+1
+  const recipe=META_RECIPE[opp.id]; // 参考構築があれば実際の投入枚数で計算
+  const copyOf=id=>{ if(!recipe) return 3; const hit=recipe.find(([rid])=>rid===id); return hit?hit[1]:3; };
   const rows=(opp.key||[]).map(id=>byId[id]).filter(Boolean).map(c=>{
-    const copies=3; // 仮定: 該当カードは3枚積み
+    const copies=copyOf(c.id);
     const p=pAtLeastOne(copies,Math.min(seen,40));
-    return {c,cost:+c.cost,p,online:(+c.cost<=adTurn)};
+    return {c,cost:+c.cost,p,copies,online:(+c.cost<=adTurn)};
   }).sort((a,b)=> a.cost-b.cost || b.p-a.p);
   let h=`<div class="panel"><h3 style="margin-top:0">相手の警戒カード（${adPD==='play'?'相手=後攻':'相手=先攻'} / ${adTurn}ターン目時点）</h3>`;
   h+=rows.map(r=>{
@@ -1317,15 +1359,75 @@ function threatPanelHTML(opp){
       <div class="kinfo"><div class="kn"><span class="cst">${r.c.cost}</span>${esc(r.c.name)} ${r.online?'<span class="verdict v-ret" style="background:var(--danger)">今ターン着地圏</span>':`<span class="muted" style="font-size:11px">T${r.c.cost}〜</span>`}</div>
         <div class="kr">${esc((r.c.skill_text||'').replace(/<[^>]+>/g,'').replace(/\n/g,' ').slice(0,52))}</div>
         <div class="kbar"><span style="width:${pc}%;background:${col}"></span></div></div>
-      <div class="pct"><b style="color:${col}">${pc}%</b><div class="muted" style="font-size:10px">引いてる確率</div></div></div>`;
+      <div class="pct"><b style="color:${col}">${pc}%</b><div class="muted" style="font-size:10px">引いてる確率(${r.copies}枚積み)</div></div></div>`;
   }).join('');
-  h+=`<div class="muted" style="font-size:11px;margin-top:6px">※40枚・該当カード3枚積み・見えた枚数=初手3＋ターン数(＋後攻1)の概算による超幾何分布。実際の投入枚数やサーチで変動。</div></div>`;
+  h+=`<div class="muted" style="font-size:11px;margin-top:6px">※40枚デッキ・見えた枚数=初手3＋ターン数(＋後攻1)の概算による超幾何分布。${recipe?'投入枚数は参考構築の実枚数を使用。':'投入枚数は3枚と仮定。'}サーチ/ドロー増で変動。</div></div>`;
   return h;
+}
+
+/* ============ BATTLES（対戦記録・実測勝率） ============ */
+function recordFor(deckId,oppId){
+  const b=(state.battles||[]).filter(x=>(!deckId||x.deckId==deckId)&&(!oppId||x.oppId===oppId));
+  const w=b.filter(x=>x.win).length;
+  return {n:b.length,w,l:b.length-w};
+}
+function initBattles(){
+  const dsel=$('#btDeck'), cur=dsel.value;
+  const deckOpts=state.decks.map(d=>{const cl=CLASSES[d.cls];return `<option value="${d.id}">${cl?cl.jp:''}｜${esc(d.name)}</option>`}).join('');
+  dsel.innerHTML=deckOpts||'<option value="">（先にデッキを保存）</option>';
+  if(cur&&state.decks.some(d=>d.id==cur)) dsel.value=cur;
+  const osel=$('#btOpp'), oc=osel.value;
+  osel.innerHTML=META_DECKS.map(m=>`<option value="${m.id}">vs ${m.name}</option>`).join('');
+  if(oc) osel.value=oc;
+  const sd=$('#btStatDeck'), sv=sd.value;
+  sd.innerHTML='<option value="">全デッキ合算</option>'+deckOpts;
+  if(sv&&state.decks.some(d=>d.id==sv)) sd.value=sv;
+  sd.onchange=renderBattles;
+  $('#btSave').onclick=()=>{
+    if(!dsel.value){ alert('先に「デッキ作成」でデッキを保存してください'); return; }
+    state.battles.push({id:Date.now(),date:new Date().toISOString().slice(0,10),
+      deckId:dsel.value,oppId:osel.value,pd:$('#btPD').value,
+      win:$('#btResult').value==='win',memo:$('#btMemo').value.trim()});
+    persist(); $('#btMemo').value=''; renderBattles(); renderPlaying(); renderAdvisor();
+    flashOK('記録しました');
+  };
+  renderBattles();
+}
+function renderBattles(){
+  const statDeck=$('#btStatDeck').value;
+  // matchup stats
+  const total=recordFor(statDeck,null);
+  let sh='';
+  if(total.n){
+    const pc=Math.round(total.w/total.n*100);
+    sh+=`<div class="anz"><div class="txt">通算 <b>${total.w}勝${total.l}敗</b>（勝率 <b style="color:${pc>=50?'var(--ok)':'var(--danger)'}">${pc}%</b> / ${total.n}戦）</div></div>`;
+    META_DECKS.forEach(m=>{
+      const r=recordFor(statDeck,m.id); if(!r.n) return;
+      const p=Math.round(r.w/r.n*100), col=p>=60?'var(--ok)':p>=40?'var(--accent2)':'var(--danger)';
+      const cl=CLASSES[m.cls];
+      sh+=`<div class="keeprow"><div class="kinfo"><div class="kn" style="color:${cl.c}">${m.name} <span class="muted" style="font-weight:400">${r.w}勝${r.l}敗 / ${r.n}戦</span></div>
+        <div class="kbar"><span style="width:${p}%;background:${col}"></span></div></div>
+        <div class="pct"><b style="color:${col}">${p}%</b></div></div>`;
+    });
+  } else sh='<div class="muted" style="font-size:12px">まだ記録がありません。対戦したら上から記録してください。</div>';
+  $('#btStats').innerHTML=sh;
+  // history
+  const el=$('#btList');
+  if(!(state.battles||[]).length){ el.innerHTML='<div class="empty">履歴はまだありません</div>'; return; }
+  el.innerHTML=state.battles.slice().reverse().slice(0,50).map(b=>{
+    const deck=state.decks.find(d=>d.id==b.deckId), m=META_DECKS.find(x=>x.id===b.oppId);
+    return `<div class="keeprow"><span class="verdict ${b.win?'v-keep':'v-ret'}">${b.win?'勝ち':'負け'}</span>
+      <div class="kinfo"><div class="kn">${esc(deck?deck.name:'?')} <span class="muted">vs ${m?m.name:'?'}・${b.pd==='play'?'先攻':'後攻'}・${b.date}</span></div>
+      ${b.memo?`<div class="kr">${esc(b.memo)}</div>`:''}</div>
+      <button class="del mini" data-delbt="${b.id}">削除</button></div>`;
+  }).join('');
+  el.querySelectorAll('[data-delbt]').forEach(x=>x.onclick=()=>{
+    state.battles=state.battles.filter(b=>b.id!=x.dataset.delbt); persist(); renderBattles(); });
 }
 
 /* ============ boot ============ */
 initFilters(); renderCards();
-initDeck(); initPlaying(); initAdvisor(); initCombos(); initMatchup(); initTurns(); initData();
+initDeck(); initPlaying(); initAdvisor(); initBattles(); initCombos(); initMatchup(); initTurns(); initData();
 </script>
 </body>
 </html>
