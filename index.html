@@ -127,6 +127,19 @@
   .savedeck{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel2);border-radius:7px;margin-bottom:4px}
   .savedeck .sn{flex:1;cursor:pointer;font-size:12.5px} .savedeck .sn:hover{color:var(--accent)}
   @media(max-width:820px){.decklayout{grid-template-columns:1fr}.deckside{position:static}}
+  /* playing */
+  .mudeck{border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden;background:var(--panel)}
+  .mudeck>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:10px;background:var(--panel2)}
+  .mudeck>summary::-webkit-details-marker{display:none}
+  .mudeck>summary .tierb{font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;background:var(--accent);color:#0b1020}
+  .mudeck>summary .tierb.t2{background:var(--muted)}
+  .mudeck>summary .mn{font-weight:700;flex:1}
+  .mudeck>summary .adv{font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--line)}
+  .mudeck .inner{padding:14px}
+  .anz{background:var(--panel2);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+  .anz h4{margin:0 0 4px;font-size:12px;color:var(--accent2)}
+  .anz .txt{font-size:12.5px}
+  .draftbtn{font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
   @media(max-width:520px){.modal .head{flex-direction:column}.modal .head img{width:100px}}
 </style>
 </head>
@@ -136,6 +149,7 @@
   <nav>
     <button data-tab="cards" class="active">カード</button>
     <button data-tab="deck">デッキ作成</button>
+    <button data-tab="playing">プレイング</button>
     <button data-tab="combos">コンボ・シナジー</button>
     <button data-tab="matchup">マッチアップ</button>
     <button data-tab="turns">ターン別</button>
@@ -202,6 +216,17 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- PLAYING -->
+  <section id="tab-playing" class="tab">
+    <h2>プレイング</h2>
+    <div class="note">保存したデッキを選び、<b>そのデッキの回し方</b>と<b>現環境デッキ（ローテ）とのマッチアップ</b>を書き溜めます。各メタデッキの「狙い・キーカード・警戒点」は下書き済み。「自動下書き」ボタンで自分のデッキの答えを提案します。<span id="metaSrc" class="muted"></span></div>
+    <div class="row" style="margin-bottom:12px">
+      <label class="muted">自分のデッキ:</label>
+      <select id="plDeck" style="min-width:220px"></select>
+    </div>
+    <div id="plBody"></div>
   </section>
 
   <!-- COMBOS -->
@@ -323,7 +348,7 @@ const DB = {
   load(){ try{return JSON.parse(localStorage.getItem('svwb_kb'))||{}}catch(e){return{}} },
   save(){ localStorage.setItem('svwb_kb',JSON.stringify(state)); },
 };
-let state = Object.assign({combos:[],matchups:{},turns:[],decks:[]}, DB.load());
+let state = Object.assign({combos:[],matchups:{},turns:[],decks:[],playing:{}}, DB.load());
 function persist(){ DB.save(); }
 
 /* ============ helpers ============ */
@@ -578,11 +603,11 @@ function initData(){
   $('#impBtn').onclick=()=>$('#impFile').click();
   $('#impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
     r.onload=()=>{try{const d=JSON.parse(r.result);
-      state=Object.assign({combos:[],matchups:{},turns:[],decks:[]},d);persist();
-      renderComboList();renderMatchup();renderTurns();renderSavedDecks();alert('読み込みました');
+      state=Object.assign({combos:[],matchups:{},turns:[],decks:[],playing:{}},d);persist();
+      renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();alert('読み込みました');
     }catch(err){alert('読み込み失敗: '+err.message);}};r.readAsText(f);};
-  $('#wipeBtn').onclick=()=>{if(confirm('コンボ・マッチアップ・ターン別・デッキを全消去します。よろしいですか？')){
-    state={combos:[],matchups:{},turns:[],decks:[]};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();}};
+  $('#wipeBtn').onclick=()=>{if(confirm('コンボ・マッチアップ・ターン別・デッキ・プレイングを全消去します。よろしいですか？')){
+    state={combos:[],matchups:{},turns:[],decks:[],playing:{}};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();}};
   $('#refreshBtn').onclick=async()=>{
     try{const res=await fetch('https://shadowverse-wb.com/web/CardList/cardList?lang=ja');
       const j=await res.json();const total=j.data&&j.data.count;
@@ -707,7 +732,7 @@ function saveDeck(){
   if(curDeck.id){ const i=state.decks.findIndex(d=>d.id===curDeck.id);
     if(i>=0) state.decks[i]={...curDeck,cards:{...curDeck.cards}};
   } else { curDeck.id=Date.now(); state.decks.push({...curDeck,cards:{...curDeck.cards}}); }
-  persist(); renderSavedDecks();
+  persist(); renderSavedDecks(); initPlaying();
   flashOK(deckTotal()===DECKSIZE?'保存しました（40枚）':`保存しました（${deckTotal()}枚）`);
 }
 function flashOK(msg){ let el=$('#deckFlash'); if(!el){el=document.createElement('div');el.id='deckFlash';
@@ -725,7 +750,7 @@ function renderSavedDecks(){
   }).join('');
   el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>loadDeck(+b.dataset.load));
   el.querySelectorAll('[data-deldeck]').forEach(b=>b.onclick=()=>{
-    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); } });
+    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); initPlaying(); } });
 }
 function loadDeck(id){
   const d=state.decks.find(x=>x.id===id); if(!d) return;
@@ -735,9 +760,191 @@ function loadDeck(id){
   renderPool(); renderDeck();
 }
 
+/* ============ PLAYING (meta matchups) ============ */
+// 現行ローテ環境（第8弾「クロニクル・オブ・デスティニー」/ 2026-07-01時点, 出典: game8 ティア表）
+const META_SRC='第8弾「クロニクル・オブ・デスティニー」環境 / 2026-07-01時点・出典: game8ティア表';
+const META_DECKS=[
+  {id:'ramp_dragon',name:'ランプドラゴン',cls:'Dragoncraft',tier:1,threat:['ramp'],
+   key:['10042310','10741310','10444120','10143140','10744120','10143110'],
+   plan:'竜の啓示・退屈な睥睨・ゾーイなどでPP最大値を先行して伸ばし、最速で10PPに到達。大型フォロワーや全体除去（ナイトフォールドラゴンで盤面-0/-9、龍谷のエルダードラゴンで守護+展開）で盤面を制圧し、再臨のジェネシスドラゴン等の疾走で締める。',
+   watch:'4〜5ターンにPPリードを許すと、6〜7ターンに本来出せない大型が着地する。中盤に横並べしても全体-9や全体ダメージで一掃されがち。相手が10PP到達後は全体除去＋大型のワンパンに警戒し、盤面を空けすぎない/戻される前提で詰める。'},
+  {id:'spell_witch',name:'スペルウィッチ',cls:'Runecraft',tier:1,threat:['burst'],
+   key:['10834110','10834120','10833110'],
+   plan:'スペルを連打してスペルブーストを稼ぎ、恩愛の大地・テトラ＆ラティカのX（スペブ回数）を貯める。Xが一定以上でソニック・フォー等を獲得し、合計16点級の疾走リーサルを狙う。ジンジャーで突進付与＋手札全体スペブ加速。',
+   watch:'長引くほどスペブが貯まり、突然リーサル圏内に入る典型的なコンボ寄せ。テトラ＆ラティカ（6PP）着地の次ターンが最も危険。序盤の顔は軽視されがちなので、こちらは速度で押すか、相手のリーサルターンを1ターン早く迎える意識を持つ。'},
+  {id:'evo_bishop',name:'進化ビショップ',cls:'Havencraft',tier:1,threat:['board','evolve'],
+   key:['10864110','10404110','10464120'],
+   plan:'進化・超進化を毎ターン連打して盤面を上書き。飛躍の姉妹・ベルディリア＆カステルで2コス以下を超進化展開、進化6回で天司長の後継・サンダルフォンを直接召喚、威容なる星晶騎士・ヴィーラで2体消滅＋守護。',
+   watch:'盤面を毎ターン強く上書きしてくるので、中途半端な盤面は放置されやすい。ヴィーラ（8PP）の消滅2枚＋守護、サンダルフォンの継続打点が重い。全体除去を温存し、横に並んだ超進化持ちをまとめて処理できるタイミングを作る。'},
+  {id:'midrange_nightmare',name:'ミッドレンジナイトメア',cls:'Abysscraft',tier:1,threat:['board','tempo'],
+   key:['10754110','10754120'],
+   plan:'突進付与で盤面を取り続けアドバンテージを稼ぐ王道ミッド。傍死のアナテマ・徒姫で2コス以下ナイトメアを2種展開＋突進付与、終盤にデッドプレゼンター・マクミランがネクロマンス10でゾンビ3体を大量展開。',
+   watch:'盤面の取り合いに滅法強い。徒姫着地後は出したフォロワーが毎ターン突進で処理されるため、こちらの横並べが機能しにくい。徒姫を除去できるかが分岐。マクミラン（9PP）の展開＋死者強化での押し込みに注意。'},
+  {id:'combo_royal',name:'連携ロイヤル',cls:'Swordcraft',tier:2,threat:['tempo','board'],
+   key:['10723310','10724110','10824110'],
+   plan:'カードを連続でプレイして「連携」回数を稼ぎ、静粛齎す抜刀などの低コスト除去やギルダリア・バニー＆バロンで盤面を制圧しつつテンポを取る。',
+   watch:'低コストの質の高い除去を連打して盤面を維持してくる。こちらのキーフォロワーがピンポイントで処理されやすいので、脅威は複数体でずらして展開する。'},
+  {id:'tempo_elf',name:'テンポエルフ',cls:'Forestcraft',tier:2,threat:['tempo','burst'],
+   key:['10012110','10814110'],
+   plan:'1ターンに複数枚プレイする条件を満たしてテンポ良く展開・打点を伸ばす。アドベンチャーエルフ・メイ等の複数プレイ条件カードで序盤から圧をかけ、セタス＆メイシアで詰める。',
+   watch:'展開が速く、序盤から盤面と顔の両取りをしてくる。守護での受けと盤面処理が遅れると一気に押し切られる。'},
+  {id:'temanote_witch',name:'魔手ウィッチ',cls:'Runecraft',tier:2,threat:['board'],
+   key:['10631110','10633310','10634120'],
+   plan:'天晶（土の印系）を並べて条件を満たし、旧き天晶・カルギデンスラなどの大型でフィニッシュ。盤面と手札リソースを両立させる。',
+   watch:'リソースが尽きにくく長期戦に強い。カルギデンスラ着地までにライフを詰め切るか、大型を除去できる札を温存する。'},
+  {id:'discard_dragon',name:'ディスカードドラゴン',cls:'Dragoncraft',tier:2,threat:['tempo'],
+   key:['10642310','10842120'],
+   plan:'手札を「捨てる」効果をトリガーに除去・展開を行う。赤色流し等で捨てつつ除去し、キミカなどで捨てた枚数を活かして盤面を作る。',
+   watch:'捨てる効果で低コストから質の高い除去・展開を出してくる。テンポを取り返される前提で、脅威を分散させる。'},
+  {id:'mode_nightmare',name:'モードナイトメア',cls:'Abysscraft',tier:2,threat:['board','tempo'],
+   key:['10354110','10351110'],
+   plan:'モード（融合）を切り替えて状況に応じた除去・展開を柔軟に選択。混融の継承者・シャム＝ナクアや肯定者で盤面とリソースを両立。',
+   watch:'対応力が高く、こちらの動きに合わせて除去/展開を選んでくる。一本調子の攻めは対処されやすいので、複数の勝ち筋で圧をかける。'},
+];
+const THREAT_ADVICE={
+  ramp:'相手は序盤が薄い。顔を詰めて速度勝負に持ち込み、大型が着地する6〜7ターン前に削り切りたい。',
+  burst:'コンボによる一撃リーサル型。回復・守護で耐えるか、相手のリーサルターンより先にこちらが決める。盤面を空にしない。',
+  board:'横展開・盤面制圧型。全体除去や大型での盤面返しが重要。中途半端な並べは損。',
+  evolve:'進化・超進化で盤面を上書きしてくる。全体除去を温存し、まとめて処理できる瞬間を作る。',
+  tempo:'テンポ良く盤面を取り続けてくる。脅威は複数体に分散させ、守護で受けつつ取り返す。',
+};
+const ANSWER_CATS=[
+  ['守護', /守護/, '守護（受け）'],
+  ['回復', /回復|ドレイン|防御を?回復|ダメージを3にする/, '回復・軽減'],
+  ['全体除去', /場のフォロワーすべて/, '全体除去'],
+  ['単体除去', /選ぶ。それを破壊|選ぶ。それを消滅|選ぶ。それに\d/ , '単体除去'],
+  ['疾走', /疾走/, '疾走・打点'],
+];
+function deckCardList(deck){ // returns [{c,n}]
+  return Object.entries(deck.cards).map(([id,n])=>({c:byId[id],n})).filter(x=>x.c);
+}
+function answersFor(deck,regex,cap=6){
+  const seen=new Set(),out=[];
+  for(const {c} of deckCardList(deck)){
+    if(seen.has(c.name))continue;
+    if(regex.test(c.skill_text||'')||regex.test(c.evo_skill_text||'')){ out.push(c.name); seen.add(c.name); }
+    if(out.length>=cap)break;
+  }
+  return out;
+}
+function initPlaying(){
+  $('#metaSrc').textContent='（'+META_SRC+'）';
+  const sel=$('#plDeck');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">デッキを選択</option>'+state.decks.map(d=>{
+    const cl=CLASSES[d.cls]; return `<option value="${d.id}">${cl?cl.jp:''}｜${esc(d.name)}</option>`;
+  }).join('');
+  if(cur && state.decks.some(d=>d.id==cur)) sel.value=cur;
+  sel.onchange=renderPlaying;
+  renderPlaying();
+}
+function getPL(deckId){
+  state.playing[deckId]=state.playing[deckId]||{general:{},matchups:{}};
+  if(!state.playing[deckId].general) state.playing[deckId].general={};
+  if(!state.playing[deckId].matchups) state.playing[deckId].matchups={};
+  return state.playing[deckId];
+}
+const GEN_FIELDS=[['wincon','勝ち筋（どうやって勝つか）'],['mulligan','マリガン（キープ基準）'],
+  ['early','序盤(1-3T)の動き'],['mid','中盤(4-6T)の動き'],['late','終盤(7T-)・リーサル']];
+function renderPlaying(){
+  const el=$('#plBody'), deckId=$('#plDeck').value;
+  if(!state.decks.length){ el.innerHTML='<div class="empty">先に「デッキ作成」タブでデッキを保存してください</div>'; return; }
+  if(!deckId){ el.innerHTML='<div class="empty">自分のデッキを選択してください</div>'; return; }
+  const deck=state.decks.find(d=>d.id==deckId); if(!deck){ el.innerHTML=''; return; }
+  const pl=getPL(deckId);
+  // general panel
+  let html=`<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:6px">
+    <h3 style="margin:0">このデッキの回し方</h3><button class="draftbtn" id="genDraft">自動下書き</button></div>`;
+  html+=GEN_FIELDS.map(([k,label])=>`<label class="fld">${label}</label>
+    <textarea data-gen="${k}">${esc(pl.general[k]||'')}</textarea>`).join('');
+  html+=`</div>`;
+  // meta matchups
+  html+=`<h3>メタ別マッチアップ（ローテ）</h3>`;
+  html+=META_DECKS.map(m=>{
+    const cl=CLASSES[m.cls], mm=pl.matchups[m.id]||{};
+    const adv=mm.adv||'';
+    const advColor=adv==='有利'?'var(--ok)':adv==='不利'?'var(--danger)':'var(--muted)';
+    return `<details class="mudeck"><summary>
+      <span class="tierb ${m.tier===2?'t2':''}">Tier${m.tier}</span>
+      <span class="mn" style="color:${cl.c}">${m.name}</span>
+      <span class="muted" style="font-size:11px">${cl.jp}</span>
+      <span class="adv" style="color:${advColor};border-color:${advColor}">${adv||'相性未定'}</span>
+    </summary><div class="inner" data-meta="${m.id}">
+      <div class="anz"><h4>相手の狙い</h4><div class="txt">${esc(m.plan)}</div></div>
+      <div class="anz"><h4>キーカード</h4><div>${m.key.map(id=>miniCard(id,true)).join('')}</div></div>
+      <div class="anz"><h4>警戒点</h4><div class="txt">${esc(m.watch)}</div></div>
+      <div class="row" style="justify-content:space-between;align-items:center;margin:10px 0 2px">
+        <div class="row" style="gap:6px"><label class="muted" style="font-size:12px">相性</label>
+          <select data-mu="adv"><option value="">未定</option>
+            ${['有利','五分','不利'].map(a=>`<option ${adv===a?'selected':''}>${a}</option>`).join('')}</select></div>
+        <button class="draftbtn" data-mudraft="${m.id}">自動下書き</button></div>
+      <label class="fld">この対面での立ち回り</label>
+      <textarea data-mu="note">${esc(mm.note||'')}</textarea>
+      <label class="fld">この対面のマリガン</label>
+      <textarea data-mu="mull">${esc(mm.mull||'')}</textarea>
+    </div></details>`;
+  }).join('');
+  el.innerHTML=html;
+  // bind general
+  el.querySelectorAll('[data-gen]').forEach(t=>t.addEventListener('input',()=>{
+    pl.general[t.dataset.gen]=t.value; persist(); }));
+  $('#genDraft').onclick=()=>{ draftGeneral(deck,pl); renderPlaying(); };
+  // bind matchup fields
+  el.querySelectorAll('.mudeck .inner').forEach(box=>{
+    const mid=box.dataset.meta; pl.matchups[mid]=pl.matchups[mid]||{};
+    box.querySelectorAll('[data-mu]').forEach(inp=>{
+      const ev=inp.tagName==='SELECT'?'change':'input';
+      inp.addEventListener(ev,()=>{ pl.matchups[mid][inp.dataset.mu]=inp.value; persist();
+        if(inp.dataset.mu==='adv') renderPlaying(); });
+    });
+  });
+  el.querySelectorAll('[data-mudraft]').forEach(b=>b.onclick=(e)=>{
+    e.preventDefault(); const m=META_DECKS.find(x=>x.id===b.dataset.mudraft);
+    draftMatchup(deck,pl,m); persist(); renderPlaying();
+    // reopen this details
+    const dt=b.closest('details'); if(dt) dt.open=true;
+  });
+}
+function draftGeneral(deck,pl){
+  const g=pl.general;
+  const cards=deckCardList(deck);
+  const total=cards.reduce((a,x)=>a+x.n,0);
+  const finishers=cards.filter(x=>/疾走/.test(x.c.skill_text||'')||+x.c.cost>=8).map(x=>x.c.name);
+  const guards=answersFor(deck,/守護/); const heals=answersFor(deck,/回復|ドレイン/);
+  const removal=answersFor(deck,/場のフォロワーすべて|それを破壊|それを消滅/);
+  const lowcurve=cards.filter(x=>+x.c.cost<=2).reduce((a,x)=>a+x.n,0);
+  const set=(k,v)=>{ if(!g[k]||confirm('「'+GEN_FIELDS.find(f=>f[0]===k)[1]+'」を上書きしますか？')) g[k]=v; };
+  set('wincon', (finishers.length?('主なフィニッシャー: '+[...new Set(finishers)].slice(0,5).join('、')+'。'):'')+'盤面/打点でリードを作って押し切る。');
+  set('early', lowcurve>=8?'低コストが多め。序盤から盤面を作ってテンポを取る。':'序盤は無理せず、除去とキープした札で捌く。'+(guards.length?(' 守護: '+guards.slice(0,3).join('、')):''));
+  set('mid', '中盤は盤面の取り合い。'+(removal.length?('全体/除去: '+removal.slice(0,4).join('、')+'を状況で使い分ける。'):'進化権を有効に使う。'));
+  set('late', finishers.length?('7T以降は'+[...new Set(finishers)].slice(0,4).join('、')+'でリーサルを狙う。'):'リソース勝ちを目指す。');
+  set('mulligan', '低コスト帯とデッキの核を優先キープ。'+(guards.length||heals.length?(' 受け札('+[...guards,...heals].slice(0,3).join('、')+')は対アグロで残す。'):''));
+}
+function draftMatchup(deck,pl,m){
+  const mm=pl.matchups[m.id]=pl.matchups[m.id]||{};
+  const lines=[];
+  m.threat.forEach(t=>{ if(THREAT_ADVICE[t]) lines.push('・'+THREAT_ADVICE[t]); });
+  const guards=answersFor(deck,/守護/), heals=answersFor(deck,/回復|ドレイン/),
+        board=answersFor(deck,/場のフォロワーすべて/), single=answersFor(deck,/それを破壊|それを消滅|それに\d/),
+        rush=answersFor(deck,/疾走/);
+  const tips=[];
+  if(m.threat.includes('burst')&&(guards.length||heals.length)) tips.push('耐える札: '+[...guards,...heals].slice(0,4).join('、'));
+  if((m.threat.includes('board')||m.threat.includes('evolve'))&&(board.length||single.length)) tips.push('盤面を返す札: '+[...board,...single].slice(0,5).join('、'));
+  if(m.threat.includes('ramp')&&rush.length) tips.push('速度で押す札: '+rush.slice(0,5).join('、'));
+  if(tips.length) lines.push('自分の主な回答 → '+tips.join(' / '));
+  lines.push('警戒: '+m.watch);
+  const draft=lines.join('\n');
+  if(!mm.note||confirm('「この対面での立ち回り」を上書きしますか？')) mm.note=draft;
+  // mulligan hint
+  const mull = m.threat.includes('ramp')?'低コスト＋早期打点をキープして速度勝負。':
+               m.threat.includes('burst')?'受け札('+([...guards,...heals].slice(0,3).join('、')||'守護/回復')+')と序盤の動きをキープ。':
+               '盤面に触れる札('+([...board,...single].slice(0,3).join('、')||'除去')+')と低コストをキープ。';
+  if(!mm.mull||confirm('「この対面のマリガン」を上書きしますか？')) mm.mull=mull;
+}
+
 /* ============ boot ============ */
 initFilters(); renderCards();
-initDeck(); initCombos(); initMatchup(); initTurns(); initData();
+initDeck(); initPlaying(); initCombos(); initMatchup(); initTurns(); initData();
 </script>
 </body>
 </html>
