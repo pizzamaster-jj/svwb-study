@@ -1033,20 +1033,39 @@ function initAdvisor(){
 // ===== phase2: 確率計算＆アクション最適化 =====
 function comb(n,k){ if(k<0||k>n)return 0; k=Math.min(k,n-k); let r=1; for(let i=0;i<k;i++) r=r*(n-i)/(i+1); return r; }
 function pAtLeastOne(copies,seen,N=40){ if(seen<=0||copies<=0)return 0; const p=1-comb(N-copies,seen)/comb(N,seen); return Math.max(0,Math.min(1,p)); }
-function playValue(c,opp){
-  const cost=+c.cost, R=cardRoles(c), th=(opp&&opp.threat)||[]; let v=cost; // PPを使う＝テンポ価値
+function playValue(c,opp,PP){
+  const cost=+c.cost, R=cardRoles(c), M=cardMechanics(c), th=(opp&&opp.threat)||[]; let v=cost; // PPを使う＝テンポ価値
   if(R.includes('develop')) v+=1.5;
   if(R.includes('removal')) v+= (th.includes('board')||th.includes('tempo')||th.includes('evolve'))?3:1.5;
   if(R.includes('guard'))  v+= (th.includes('board')||th.includes('tempo')||th.includes('burst'))?2:1;
   if(R.includes('draw'))   v+=1;
   if(R.includes('finisher')&&cost>=7) v+=2;
+  // ①タイミング: エンハンスは該当PPで真価、未到達は減点
+  if(M.enhance){ v += (PP>=M.enhance)? 2.5 : -3; }
+  // PP加速は早いターンほど価値
+  if(M.ppRamp && PP<=4) v+=2;
+  // 進化/超進化が強い札は進化解禁(4)以降にプレイ価値UP
+  if((M.evoWant||M.superEvoWant) && PP>=4) v+=1.5;
+  // ②対面で必要な回答なら加点
+  if(opp&&META_NEEDS[opp.id] && META_NEEDS[opp.id].needs.some(n=>cardMeetsNeed(c,n))) v+=1.5;
   return v;
+}
+// このプレイ順に条件未達など注意があれば返す
+function lineNotes(cards,PP){
+  const n=[];
+  cards.forEach(c=>{ const M=cardMechanics(c);
+    if(M.enhance&&PP<M.enhance) n.push(`${c.name}はエンハンス${M.enhance}で真価（今は素出し）`);
+    if(M.rally&&M.rally>=15) n.push(`${c.name}は連携${M.rally}達成が前提`);
+    if(M.necro&&M.necro>=8) n.push(`${c.name}はネクロマンス${M.necro}が前提`);
+    if(M.directSummon) n.push(`${c.name}は直接召喚（通常は手から出さない）`);
+  });
+  return n;
 }
 function bestLines(hand,PP,opp){
   const items=hand.slice(0,12), n=items.length, lines=[];
   for(let mask=0;mask<(1<<n);mask++){
     let cost=0,val=0,cards=[];
-    for(let i=0;i<n;i++) if(mask&(1<<i)){ cost+=+items[i].cost; val+=playValue(items[i],opp); cards.push(items[i]); }
+    for(let i=0;i<n;i++) if(mask&(1<<i)){ cost+=+items[i].cost; val+=playValue(items[i],opp,PP); cards.push(items[i]); }
     if(cost<=PP && cards.length) lines.push({cards,cost,val});
   }
   lines.sort((a,b)=> b.val-a.val || b.cost-a.cost || a.cards.length-b.cards.length);
@@ -1054,9 +1073,10 @@ function bestLines(hand,PP,opp){
   for(const l of lines){ const k=l.cards.map(c=>c.id).sort().join(','); if(seen.has(k))continue; seen.add(k); out.push(l); if(out.length>=3)break; }
   return out;
 }
+function plainText(c){ return ((c.skill_text||'')+' '+(c.evo_skill_text||'')).replace(/<[^>]+>/g,''); }
 // カードの役割判定
 function cardRoles(c){
-  const t=(c.skill_text||'')+' '+(c.evo_skill_text||''); const cost=+c.cost; const R=[];
+  const t=plainText(c); const cost=+c.cost; const R=[];
   if(/場に出す/.test(t)||(c.type==='Follower'&&cost<=3)) R.push('develop');
   if(/引く|手札に加える|ドロー/.test(t)) R.push('draw');
   if(/守護/.test(t)) R.push('guard');
@@ -1064,6 +1084,50 @@ function cardRoles(c){
   if(/破壊|消滅|それに\d/.test(t)) R.push('removal');
   if(/疾走/.test(t)||cost>=7) R.push('finisher');
   return R;
+}
+// ①カード効果の条件・タイミング解析
+function cardMechanics(c){
+  const all=plainText(c); const M={}; let m;
+  if(m=all.match(/エンハンス[_\s]*(\d+)/)) M.enhance=+m[1];
+  if(m=all.match(/連携[_\s]*(\d+)/)) M.rally=+m[1];
+  if(m=all.match(/ネクロマンス[_\s]*(\d+)/)) M.necro=+m[1];
+  if(m=all.match(/スペルブースト時?[_\s]*(\d+)/)) M.spellboostN=+m[1];
+  if(/スペルブースト/.test(all)) M.spellboost=true;
+  if(/覚醒/.test(all)) M.awaken=true;
+  if(/解放奥義/.test(all)) M.liberate=true;
+  if(/直接召喚/.test(all)) M.directSummon=true;
+  if(m=all.match(/カウントダウン[_\s]*(\d+)/)) M.countdown=+m[1];
+  if(/進化時|進化したとき/.test(all)) M.evoWant=true;
+  if(/超進化時/.test(all)) M.superEvoWant=true;
+  if(/PP最大値を?\s*\+|自分のPPを\+/.test(all)) M.ppRamp=true;
+  if(m=all.match(/リーダーに(\d+)ダメージ/)) M.reach=+m[1];
+  return M;
+}
+// ②対面別の必要な回答（RESEARCH.md ＋ カード効果ベース。相性データ未整備につき推定）
+const META_NEEDS={
+  ramp_dragon:{race:6,needs:['pressure','rush'],note:'6-7Tの大型着地前に速度で押す。重い札の撃ち合いは不利'},
+  spell_witch:{race:6,needs:['guard','heal','pressure'],note:'6-7Tのコンボ前に守護/回復で耐えるか先に削り切る'},
+  evo_bishop:{needs:['boardclear','removal','guard'],note:'ワイド盤面に全体除去。進化の上書きに対応'},
+  midrange_nightmare:{needs:['removal','board'],note:'徒姫を除去し盤面を先に取る'},
+  combo_royal:{needs:['removal','board'],note:'序盤の盤面勝負を落とさない'},
+  tempo_elf:{race:7,needs:['guard','boardclear'],note:'早い展開を守護/全体で受ける'},
+  temanote_witch:{needs:['pressure','removal'],note:'長期戦前にライフを詰める'},
+  discard_dragon:{needs:['board','removal'],note:'テンポを取り返されない展開'},
+  mode_nightmare:{needs:['board','pressure'],note:'複数の勝ち筋で圧をかける'},
+};
+const NEED_LABEL={guard:'守護',heal:'回復',removal:'除去',boardclear:'全体除去',board:'展開',pressure:'速攻',rush:'疾走/突進'};
+function cardMeetsNeed(c,need){
+  const R=cardRoles(c), t=(c.skill_text||'')+(c.evo_skill_text||''), cost=+c.cost;
+  switch(need){
+    case 'guard': return R.includes('guard');
+    case 'heal': return R.includes('heal');
+    case 'removal': return R.includes('removal');
+    case 'boardclear': return /場のフォロワーすべて/.test(t);
+    case 'board': return R.includes('develop');
+    case 'pressure': return cost<=3 && (R.includes('develop')||/リーダーに\d/.test(t));
+    case 'rush': return /疾走|突進/.test(t);
+  }
+  return false;
 }
 // キープ推奨度(%)ヒューリスティック
 function keepScore(c,opp){
@@ -1094,11 +1158,24 @@ function keepScore(c,opp){
     if(cost>=6&&!/疾走/.test(c.skill_text||'')){s-=8; why.push('レース負けするので重い札は返す');}
   }
   if(th.includes('evolve')){ if(R.includes('removal')){s+=6;} if(R.includes('guard')){s+=4;} }
+  // ①条件・タイミング（初手で活きる札か）
+  const M=cardMechanics(c);
+  // エンハンスは低コストほど柔軟(素出し可)＝ほぼ減点なし。高コストの純エンハンス札のみ軽く減点
+  if(M.enhance){ if(cost>=5){ s-=8; why.push('エンハンス'+M.enhance+'で真価（重く初手では弱い）'); } else { why.push('エンハンス'+M.enhance+'で伸びる(素出しも可)'); } }
+  if(M.rally&&M.rally>=15){ s-=6; why.push('連携'+M.rally+'の払い出し（設置後に真価）'); }
+  if(M.necro&&M.necro>=8){ s-=6; why.push('ネクロマンス'+M.necro+'が前提'); }
+  if(M.directSummon){ s-=18; why.push('直接召喚（引いて出す札ではない）'); }
+  if(M.countdown&&cost<=2){ s+=3; }
+  if(M.ppRamp){ s+=8; why.push('PP加速で先攻できる'); }
+  if(M.spellboost&&cost<=2){ s+=4; why.push('スペブを稼げる'); }
+  // ②対面別の必要な回答
+  if(opp&&META_NEEDS[opp.id]){ const met=META_NEEDS[opp.id].needs.filter(n=>cardMeetsNeed(c,n));
+    if(met.length){ s+=10; why.push('vs'+opp.name+'に必要('+NEED_LABEL[met[0]]+')'); } }
   // 手番補正
   if(adPD==='draw'){ if(cost>=3&&cost<=4){s+=4; why.push('後攻の+1PP/EPを活かせる');} }
   else { if(cost<=3){s+=5; why.push('先攻はテンポ重視');} }
   s=Math.max(5,Math.min(95,Math.round(s)));
-  return {score:s, why:[...new Set(why)].slice(0,3).join('・')};
+  return {score:s, why:[...new Set(why)].slice(0,4).join('・')};
 }
 let adHand=[]; // selected hand card ids
 function renderAdvisor(){
@@ -1111,6 +1188,10 @@ function renderAdvisor(){
   const uniq=[]; const seen=new Set();
   Object.keys(deck.cards).forEach(id=>{ const c=byId[id]; if(!c||seen.has(c.name))return; seen.add(c.name); uniq.push(c); });
   const scored=uniq.map(c=>({c,...keepScore(c,opp)})).sort((a,b)=>b.score-a.score||(+a.c.cost-+b.c.cost));
+  // ③カーブ衝突ペナルティ: スコア順で高コスト(4+)の重複キープを逓減
+  let heavy=0;
+  scored.forEach(x=>{ if(+x.c.cost>=4){ if(heavy>0){ const pen=Math.min(18,heavy*6); x.score=Math.max(5,x.score-pen); x.why=(x.why?x.why+'・':'')+'カーブ被り(重複keep)'; } heavy++; } });
+  scored.sort((a,b)=>b.score-a.score||(+a.c.cost-+b.c.cost));
   const pdLabel=adPD==='draw'?'後攻':'先攻';
   let html='';
   if(!opp){ html+='<div class="note" style="border-color:var(--muted)">相手デッキを選ぶと対面補正が入ります（今は'+pdLabel+'・汎用基準で表示中）</div>'; }
@@ -1178,9 +1259,11 @@ function actionPanelHTML(opp){
     return `<div class="keeprow"><div class="pct" style="width:70px;text-align:center"><b style="color:${col};font-size:16px">${pct}%</b>
         ${i===0?'<div class="verdict v-keep" style="margin-top:2px">推奨</div>':''}</div>
       <div class="kinfo"><div class="kn" style="flex-wrap:wrap">${seq.map(c=>`<span class="cardmini" onclick="openCard('${c.id}')"><img src="${c.image||''}" onerror="this.style.visibility='hidden'">${esc(c.name)}<span class="muted">(${c.cost})</span></span>`).join('')}</div>
-        <div class="kr">PP ${l.cost}/${PP} 使用${l.cost<PP?`（${PP-l.cost}余り）`:'（使い切り）'}・盤面/テンポ評価 ${l.val.toFixed(1)}</div></div></div>`;
+        <div class="kr">PP ${l.cost}/${PP} 使用${l.cost<PP?`（${PP-l.cost}余り）`:'（使い切り）'}・盤面/テンポ評価 ${l.val.toFixed(1)}</div>
+        ${lineNotes(seq,PP).map(n=>`<div class="kr" style="color:var(--accent2)">⚠ ${esc(n)}</div>`).join('')}</div></div>`;
   }).join('');
-  h+=`<div class="muted" style="font-size:11px;margin-top:6px">※候補プレイの相対推奨度（%は候補間の比較・勝率ではない）。同名カード複数引きや盤面・進化は未考慮の簡易最適化。低コストから順に出す前提。</div></div>`;
+  if(opp&&META_NEEDS[opp.id]) h+=`<div class="anz" style="margin-top:8px"><div class="txt">vs ${opp.name} の要点：${esc(META_NEEDS[opp.id].note)}</div></div>`;
+  h+=`<div class="muted" style="font-size:11px;margin-top:6px">※効果解析込み（エンハンス/進化/PP加速/対面の必要札を加味）。ただし相手盤面・同名複数引き・厳密な進化順は未考慮の簡易最適化。%は候補間の相対推奨度（勝率ではない）。</div></div>`;
   return h;
 }
 // ② 相手の警戒カード（残り山からの確率）
