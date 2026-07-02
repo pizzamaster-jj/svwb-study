@@ -169,21 +169,16 @@
 <header>
   <div class="title">🃏 シャドバ ビヨンド 学習ノート <small>Shadowverse: Worlds Beyond study tool</small></div>
   <nav>
-    <button data-tab="cards" class="active">カード</button>
-    <button data-tab="deck">デッキ作成</button>
-    <button data-tab="playing">プレイング</button>
-    <button data-tab="advisor">アドバイザー</button>
-    <button data-tab="combos">コンボ・シナジー</button>
-    <button data-tab="matchup">マッチアップ</button>
-    <button data-tab="turns">ターン別</button>
-    <button data-tab="battles">対戦記録</button>
+    <button data-tab="deck" class="active">デッキ作成</button>
+    <button data-tab="guide">戦い方</button>
+    <button data-tab="notes">実戦ノート</button>
     <button data-tab="data">データ</button>
   </nav>
 </header>
 <main>
 
   <!-- CARDS -->
-  <section id="tab-cards" class="tab active">
+  <section id="tab-cards" class="tab">
     <div class="filters">
       <input type="text" id="q" placeholder="カード名・効果テキストで検索…">
       <select id="fClass"><option value="">全クラス</option></select>
@@ -199,7 +194,7 @@
   </section>
 
   <!-- DECK BUILDER -->
-  <section id="tab-deck" class="tab">
+  <section id="tab-deck" class="tab active">
     <h2>デッキ作成</h2>
     <div class="note">クラスを選ぶとそのクラス＋ニュートラルのカードが並びます。カードをクリックで追加、右側で枚数調整。<b>40枚・同名3枚まで</b>。作ったデッキは保存でき、「データ」タブでまとめて書き出せます。</div>
     <div class="decklayout">
@@ -237,6 +232,13 @@
         <div class="panel">
           <h3 style="margin-top:0">保存済みデッキ</h3>
           <div id="savedDecks"></div>
+          <div class="div" style="margin:10px 0"></div>
+          <div class="muted" style="font-size:11px;margin-bottom:6px">参考構築から始める:</div>
+          <div class="row" style="flex-wrap:wrap;gap:4px">
+            <button class="draftbtn" onclick="importRecipe('combo_royal')">連携進化ロイヤル</button>
+            <button class="draftbtn" onclick="importRecipe('ramp_dragon')">ランプドラゴン</button>
+            <button class="draftbtn" onclick="importRecipe('spell_witch')">スペルウィッチ</button>
+          </div>
         </div>
       </div>
     </div>
@@ -339,6 +341,51 @@
       </div>
     </div>
     <div id="turnList"></div>
+  </section>
+
+  <!-- GUIDE（戦い方・全自動） -->
+  <section id="tab-guide" class="tab">
+    <h2>戦い方</h2>
+    <div class="row" style="margin-bottom:12px">
+      <label class="muted">デッキ:</label>
+      <select id="gdDeck" style="min-width:220px"></select>
+      <div class="row" style="gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+        <button class="segbtn active" id="gdPlay">先攻</button>
+        <button class="segbtn" id="gdDraw">後攻</button>
+      </div>
+    </div>
+    <div id="gdBody"></div>
+  </section>
+
+  <!-- NOTES（実戦ノート） -->
+  <section id="tab-notes" class="tab">
+    <h2>実戦ノート</h2>
+    <div class="note">対戦したら「実際にどう動いたか」を残します。書き溜めるほど、マッチアップ別の勝率と負け筋が見えてきます（「戦い方」に実績が反映されます）。</div>
+    <div class="panel">
+      <h3 style="margin-top:0">＋ 対戦を記録</h3>
+      <div class="row" style="margin-bottom:8px">
+        <select id="ntDeck" style="min-width:180px"></select>
+        <select id="ntOpp" style="min-width:170px"></select>
+        <select id="ntPD"><option value="play">先攻</option><option value="draw">後攻</option></select>
+        <select id="ntResult"><option value="win">勝ち</option><option value="lose">負け</option></select>
+      </div>
+      <label class="fld">序盤(1-3T) 実際の動き</label>
+      <textarea id="ntEarly" placeholder="例：2T諜報兵→3T沖田で盤面キープ。相手はスペブ溜め"></textarea>
+      <label class="fld">中盤(4-6T) 実際の動き</label>
+      <textarea id="ntMid" placeholder="例：4Tシエテ一斉進化が刺さった／5T分班長が全体除去で流された"></textarea>
+      <label class="fld">終盤(7T-) 実際の動きと決着</label>
+      <textarea id="ntLate" placeholder="例：7Tセザール守護で耐えて8Tマーズでリーサル／テトラ16点で負け"></textarea>
+      <label class="fld">気付き・次にやること</label>
+      <textarea id="ntLearn" placeholder="例：この対面は6Tまでに顔を12点削れてないと間に合わない"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn" id="ntSave">保存</button></div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0">マッチアップ別 実測勝率</h3>
+      <div class="row" style="margin-bottom:8px"><select id="ntStatDeck"><option value="">全デッキ合算</option></select></div>
+      <div id="ntStats"></div>
+    </div>
+    <h3>これまでのノート</h3>
+    <div id="ntList"></div>
   </section>
 
   <!-- BATTLES -->
@@ -679,10 +726,10 @@ function initData(){
   $('#impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
     r.onload=()=>{try{const d=JSON.parse(r.result);
       state=Object.assign({combos:[],matchups:{},turns:[],decks:[],playing:{},battles:[]},d);persist();
-      renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();initBattles();alert('読み込みました');
+      renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();initBattles();initGuide();initNotes();alert('読み込みました');
     }catch(err){alert('読み込み失敗: '+err.message);}};r.readAsText(f);};
   $('#wipeBtn').onclick=()=>{if(confirm('コンボ・マッチアップ・ターン別・デッキ・プレイング・対戦記録を全消去します。よろしいですか？')){
-    state={combos:[],matchups:{},turns:[],decks:[],playing:{},battles:[]};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();initBattles();}};
+    state={combos:[],matchups:{},turns:[],decks:[],playing:{},battles:[]};persist();renderComboList();renderMatchup();renderTurns();renderSavedDecks();initPlaying();initAdvisor();initBattles();initGuide();initNotes();}};
   $('#refreshBtn').onclick=async()=>{
     try{const res=await fetch('https://shadowverse-wb.com/web/CardList/cardList?lang=ja');
       const j=await res.json();const total=j.data&&j.data.count;
@@ -807,7 +854,7 @@ function saveDeck(){
   if(curDeck.id){ const i=state.decks.findIndex(d=>d.id===curDeck.id);
     if(i>=0) state.decks[i]={...curDeck,cards:{...curDeck.cards}};
   } else { curDeck.id=Date.now(); state.decks.push({...curDeck,cards:{...curDeck.cards}}); }
-  persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles();
+  persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles(); initGuide(); initNotes();
   flashOK(deckTotal()===DECKSIZE?'保存しました（40枚）':`保存しました（${deckTotal()}枚）`);
 }
 function flashOK(msg){ let el=$('#deckFlash'); if(!el){el=document.createElement('div');el.id='deckFlash';
@@ -825,7 +872,7 @@ function renderSavedDecks(){
   }).join('');
   el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>loadDeck(+b.dataset.load));
   el.querySelectorAll('[data-deldeck]').forEach(b=>b.onclick=()=>{
-    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles(); } });
+    if(confirm('このデッキを削除しますか？')){ state.decks=state.decks.filter(x=>x.id!=b.dataset.deldeck); persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles(); initGuide(); initNotes(); } });
 }
 function loadDeck(id){
   const d=state.decks.find(x=>x.id===id); if(!d) return;
@@ -1057,8 +1104,8 @@ function importRecipe(metaId){
   const total=Object.values(cards).reduce((a,b)=>a+b,0);
   if(!confirm(m.name+'の参考構築（'+total+'枚）を自分のデッキとして保存しますか？')) return;
   const deck={id:Date.now(),name:m.name+'(参考構築)',cls:m.cls,cards};
-  state.decks.push(deck); persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles();
-  $('#adDeck').value=deck.id; renderAdvisor();
+  state.decks.push(deck); persist(); renderSavedDecks(); initPlaying(); initAdvisor(); initBattles(); initGuide(); initNotes();
+  $('#adDeck').value=deck.id; renderAdvisor(); $('#gdDeck').value=deck.id; renderGuide();
   flashOK('取り込みました：'+deck.name);
 }
 let adPD='play', adTurn=4, adMyHP=20, adOppAtk=0, adMustRemove=false;
@@ -1425,9 +1472,149 @@ function renderBattles(){
     state.battles=state.battles.filter(b=>b.id!=x.dataset.delbt); persist(); renderBattles(); });
 }
 
+/* ============ GUIDE（戦い方・全自動） ============ */
+function genGuide(deck){
+  const cards=deckCardList(deck);
+  const finishers=[...new Set(cards.filter(x=>/疾走/.test(plainText(x.c))||+x.c.cost>=8).map(x=>x.c.name))];
+  const guards=answersFor(deck,/守護/), heals=answersFor(deck,/回復|ドレイン/);
+  const removal=answersFor(deck,/場のフォロワーすべて|それを破壊|それを消滅/);
+  const lowcurve=cards.filter(x=>+x.c.cost<=2).reduce((a,x)=>a+x.n,0);
+  return {
+    wincon:(finishers.length?('主なフィニッシャー: '+finishers.slice(0,5).join('、')+'。'):'')+'盤面/打点でリードを作って押し切る。',
+    mulligan:'低コスト帯とデッキの核を優先キープ。'+((guards.length||heals.length)?(' 受け札('+[...guards,...heals].slice(0,3).join('、')+')は対アグロで残す。'):''),
+    early: lowcurve>=8?'低コストが多め。序盤から盤面を作ってテンポを取る。':'序盤は無理せず、除去とキープした札で捌く。'+(guards.length?(' 守護: '+guards.slice(0,3).join('、')):''),
+    mid:'中盤は盤面の取り合い。'+(removal.length?('全体/除去: '+removal.slice(0,4).join('、')+'を状況で使い分ける。'):'進化権を有効に使う。'),
+    late: finishers.length?('7T以降は'+finishers.slice(0,4).join('、')+'でリーサルを狙う。'):'リソース勝ちを目指す。'
+  };
+}
+function matchupAdvice(deck,m){
+  const lines=[];
+  m.threat.forEach(t=>{ if(THREAT_ADVICE[t]) lines.push(THREAT_ADVICE[t]); });
+  const guards=answersFor(deck,/守護/), heals=answersFor(deck,/回復|ドレイン/),
+        board=answersFor(deck,/場のフォロワーすべて/), single=answersFor(deck,/それを破壊|それを消滅|それに\d/),
+        rush=answersFor(deck,/疾走/);
+  const tips=[];
+  if(m.threat.includes('burst')&&(guards.length||heals.length)) tips.push('耐える札: '+[...guards,...heals].slice(0,4).join('、'));
+  if((m.threat.includes('board')||m.threat.includes('evolve'))&&(board.length||single.length)) tips.push('盤面を返す札: '+[...board,...single].slice(0,5).join('、'));
+  if(m.threat.includes('ramp')&&rush.length) tips.push('速度で押す札: '+rush.slice(0,5).join('、'));
+  const mull = m.threat.includes('ramp')?'低コスト＋早期打点をキープして速度勝負。':
+               m.threat.includes('burst')?'受け札('+([...guards,...heals].slice(0,3).join('、')||'守護/回復')+')と序盤の動きをキープ。':
+               '盤面に触れる札('+([...board,...single].slice(0,3).join('、')||'除去')+')と低コストをキープ。';
+  return {lines, tips, mull};
+}
+let gdPD='play';
+function initGuide(){
+  const sel=$('#gdDeck'), cur=sel.value;
+  sel.innerHTML=state.decks.map(d=>{const cl=CLASSES[d.cls];return `<option value="${d.id}">${cl?cl.jp:''}｜${esc(d.name)}</option>`}).join('')||'<option value="">（デッキ未保存）</option>';
+  if(cur&&state.decks.some(d=>d.id==cur)) sel.value=cur;
+  sel.onchange=renderGuide;
+  $('#gdPlay').onclick=()=>{gdPD='play';$('#gdPlay').classList.add('active');$('#gdDraw').classList.remove('active');renderGuide();};
+  $('#gdDraw').onclick=()=>{gdPD='draw';$('#gdDraw').classList.add('active');$('#gdPlay').classList.remove('active');renderGuide();};
+  renderGuide();
+}
+function renderGuide(){
+  const el=$('#gdBody');
+  if(!state.decks.length){
+    el.innerHTML=`<div class="empty">まだデッキがありません。「デッキ作成」で作るか、参考構築から始めてください。</div>
+      <div class="row" style="justify-content:center;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" onclick="importRecipe('combo_royal')">連携進化ロイヤルを取り込む</button>
+        <button class="ghost" onclick="importRecipe('ramp_dragon')">ランプドラゴン</button>
+        <button class="ghost" onclick="importRecipe('spell_witch')">スペルウィッチ</button>
+      </div>`; return;
+  }
+  const deck=state.decks.find(d=>d.id==$('#gdDeck').value)||state.decks[0];
+  adPD=gdPD; // マリガン計算の手番補正に反映
+  const g=genGuide(deck);
+  const uniq=[]; const seen=new Set();
+  Object.keys(deck.cards).forEach(id=>{ const c=byId[id]; if(!c||seen.has(c.name))return; seen.add(c.name); uniq.push(c); });
+  const scored=uniq.map(c=>({c,...keepScore(c,null)})).sort((a,b)=>b.score-a.score||(+a.c.cost-+b.c.cost));
+  const pdLabel=gdPD==='draw'?'後攻':'先攻';
+  let html=`<div class="panel"><h3 style="margin-top:0">このデッキの回し方（自動）</h3>`;
+  [['勝ち筋',g.wincon],['マリガン',g.mulligan],['序盤(1-3T)',g.early],['中盤(4-6T)',g.mid],['終盤(7T-)',g.late]]
+    .forEach(([k,v])=>html+=`<div class="anz"><h4>${k}</h4><div class="txt">${esc(v)}</div></div>`);
+  html+=`</div>`;
+  html+=`<div class="panel"><h3 style="margin-top:0">マリガン キープ推奨（${pdLabel}）</h3>`;
+  html+=scored.slice(0,8).map(x=>keepRowHTML(x)).join('');
+  html+=`<div class="muted" style="font-size:11px;margin-top:6px">※推奨度＝カード効果・コスト・手番からの自動計算（勝率ではない）</div></div>`;
+  html+=`<h3>相手デッキ別の戦い方（自動）</h3>`;
+  html+=META_DECKS.map(m=>{
+    const cl=CLASSES[m.cls], adv=matchupAdvice(deck,m), rec=recordFor(deck.id,m.id);
+    const recChip=rec.n?`<span class="adv" style="color:${rec.w/rec.n>=0.5?'var(--ok)':'var(--danger)'}">実績 ${rec.w}-${rec.l}</span>`:'';
+    return `<details class="mudeck"><summary>
+      <span class="tierb ${m.tier===2?'t2':''}">Tier${m.tier}</span>
+      <span class="mn" style="color:${cl.c}">${m.name}</span>
+      <span class="muted" style="font-size:11px">${cl.jp}</span>${recChip}
+    </summary><div class="inner">
+      <div class="anz"><h4>相手の狙い</h4><div class="txt">${esc(m.plan)}</div></div>
+      <div class="anz"><h4>キーカード</h4><div>${m.key.map(id=>miniCard(id,true)).join('')}</div></div>
+      <div class="anz"><h4>警戒点</h4><div class="txt">${esc(m.watch)}</div></div>
+      <div class="anz"><h4>こちらの立ち回り（自動）</h4><div class="txt">${adv.lines.map(esc).join('<br>')}${adv.tips.length?'<br><b>'+adv.tips.map(esc).join('<br>')+'</b>':''}</div></div>
+      <div class="anz"><h4>この対面のマリガン（自動）</h4><div class="txt">${esc(adv.mull)}</div></div>
+    </div></details>`;
+  }).join('');
+  el.innerHTML=html;
+  el.querySelectorAll('.keeprow img').forEach(im=>im.onclick=()=>openCard(im.dataset.id));
+}
+/* ============ NOTES（実戦ノート） ============ */
+function initNotes(){
+  const dsel=$('#ntDeck'), cur=dsel.value;
+  const deckOpts=state.decks.map(d=>{const cl=CLASSES[d.cls];return `<option value="${d.id}">${cl?cl.jp:''}｜${esc(d.name)}</option>`}).join('');
+  dsel.innerHTML=deckOpts||'<option value="">（先にデッキを保存）</option>';
+  if(cur&&state.decks.some(d=>d.id==cur)) dsel.value=cur;
+  const osel=$('#ntOpp'), oc=osel.value;
+  osel.innerHTML=META_DECKS.map(m=>`<option value="${m.id}">vs ${m.name}</option>`).join('');
+  if(oc) osel.value=oc;
+  const sd=$('#ntStatDeck'), sv=sd.value;
+  sd.innerHTML='<option value="">全デッキ合算</option>'+deckOpts;
+  if(sv&&state.decks.some(d=>d.id==sv)) sd.value=sv;
+  sd.onchange=renderNotes;
+  $('#ntSave').onclick=()=>{
+    if(!dsel.value){ alert('先に「デッキ作成」でデッキを保存してください'); return; }
+    state.battles.push({id:Date.now(),date:new Date().toISOString().slice(0,10),
+      deckId:dsel.value,oppId:osel.value,pd:$('#ntPD').value,win:$('#ntResult').value==='win',
+      moves:{early:$('#ntEarly').value.trim(),mid:$('#ntMid').value.trim(),late:$('#ntLate').value.trim(),learn:$('#ntLearn').value.trim()}});
+    persist(); ['ntEarly','ntMid','ntLate','ntLearn'].forEach(i=>$('#'+i).value='');
+    renderNotes(); renderGuide(); flashOK('保存しました');
+  };
+  renderNotes();
+}
+function renderNotes(){
+  const statDeck=$('#ntStatDeck').value;
+  const total=recordFor(statDeck,null);
+  let sh='';
+  if(total.n){
+    const pc=Math.round(total.w/total.n*100);
+    sh+=`<div class="anz"><div class="txt">通算 <b>${total.w}勝${total.l}敗</b>（勝率 <b style="color:${pc>=50?'var(--ok)':'var(--danger)'}">${pc}%</b> / ${total.n}戦）</div></div>`;
+    META_DECKS.forEach(m=>{
+      const r=recordFor(statDeck,m.id); if(!r.n) return;
+      const p=Math.round(r.w/r.n*100), col=p>=60?'var(--ok)':p>=40?'var(--accent2)':'var(--danger)';
+      sh+=`<div class="keeprow"><div class="kinfo"><div class="kn" style="color:${CLASSES[m.cls].c}">${m.name} <span class="muted" style="font-weight:400">${r.w}勝${r.l}敗 / ${r.n}戦</span></div>
+        <div class="kbar"><span style="width:${p}%;background:${col}"></span></div></div>
+        <div class="pct"><b style="color:${col}">${p}%</b></div></div>`;
+    });
+  } else sh='<div class="muted" style="font-size:12px">まだ記録がありません。</div>';
+  $('#ntStats').innerHTML=sh;
+  const el=$('#ntList');
+  if(!(state.battles||[]).length){ el.innerHTML='<div class="empty">ノートはまだありません</div>'; return; }
+  el.innerHTML=state.battles.slice().reverse().slice(0,30).map(b=>{
+    const deck=state.decks.find(d=>d.id==b.deckId), m=META_DECKS.find(x=>x.id===b.oppId);
+    const mv=b.moves||{};
+    const rows=[['序盤',mv.early],['中盤',mv.mid],['終盤',mv.late],['気付き',mv.learn]].filter(([k,v])=>v);
+    return `<div class="panel"><div class="row" style="justify-content:space-between">
+      <span><span class="verdict ${b.win?'v-keep':'v-ret'}">${b.win?'勝ち':'負け'}</span>
+        <b style="margin-left:6px">${esc(deck?deck.name:'?')}</b> <span class="muted">vs ${m?m.name:'?'}・${b.pd==='play'?'先攻':'後攻'}・${b.date}</span></span>
+      <button class="del mini" data-delnt="${b.id}">削除</button></div>
+      ${rows.length?rows.map(([k,v])=>`<div class="openrow"><div class="ot">${k}</div><div class="od">${esc(v)}</div></div>`).join(''):(b.memo?`<div class="kr">${esc(b.memo)}</div>`:'')}
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-delnt]').forEach(x=>x.onclick=()=>{
+    if(confirm('このノートを削除しますか？')){ state.battles=state.battles.filter(b=>b.id!=x.dataset.delnt); persist(); renderNotes(); renderGuide(); } });
+}
+
 /* ============ boot ============ */
 initFilters(); renderCards();
 initDeck(); initPlaying(); initAdvisor(); initBattles(); initCombos(); initMatchup(); initTurns(); initData();
+initGuide(); initNotes();
 </script>
 </body>
 </html>
